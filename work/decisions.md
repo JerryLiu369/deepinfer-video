@@ -197,7 +197,13 @@
 - 影响的文件 / 集：EP04 全套交付物、`work/STATUS.md`、`work/decisions.md`
 - 决定人：showrunner / 委托人
 
-
-
-
-
+### D-014 · 2026-10-26 · 开源整理：移除过程草稿与宿主机脚本，知识库迁到书仓库
+- 背景：仓库开源前清理。双人核验草稿、manim 缓存和绑定特定机器的批处理脚本不属于可复现的工程记录。
+- 决定：
+  1. 删除 `work/facts/_alt/`、`work/research/_alt/`、`work/calc/EP03_*_b.py`。正式账本、研究简报和计算脚本已合并其结论；草稿可在提交 `339b784` 中找到。D-012、D-013 及 EP03/EP04 的审校记录里提到的 `_alt/`、`_b` 均指这些已移除的文件。
+  2. 删除 `tools/batch_runner*.sh`（写死了作者机器上的路径和模型名）和根目录误产生的 `media/`。
+  3. 知识库默认路径从 `../deepinfer-book-spec/work` 改为 `../deepinfer-book/research`（`DV_KB` 仍可覆盖）。
+  4. 纳入 `.opencode/` 与 `opencode.json`。
+- 理由：保留可追溯的产物，去掉不可复现、不可移植的部分。
+- 影响的文件 / 集：`tools/`、`work/calc/`、`work/facts/`、`work/research/`、`docs/`、`AGENTS.md`、`README.md`
+- 决定人：委托人
