@@ -15,10 +15,10 @@
 | 状态 | 集 |
 | --- | --- |
 | 已完成并入库字幕与观看手册 | EP00 全景导览、EP01 通用基座、EP02 定位全景、EP03 模型结构、EP04 代码地图、EP07 SWA 有界重放（试点标杆集） |
-| 进行中 | EP05 调度（脚本、分镜、动画代码与审校已在，成片未验收） |
+| 成片已发布，字幕与观看手册未入库 | EP05 调度 |
 | 未开始 | EP06、EP08–EP13 |
 
-逐集的阶段状态以 [`work/STATUS.md`](work/STATUS.md) 为准。成片 `.mp4` 体积大，不入库（见 `.gitignore`），只保留字幕和观看手册，见 [`work/release/`](work/release/)。
+逐集的阶段状态以 [`work/STATUS.md`](work/STATUS.md) 为准。成片 `.mp4` 体积大，不入库（见 `.gitignore`），发布在 [Releases](https://github.com/JerryLiu369/deepinfer-video/releases)；仓库只保留字幕和观看手册，见 [`work/release/`](work/release/)。
 
 ### 这个项目怎么做出来的
 
@@ -131,10 +131,10 @@ The plan is 14 episodes (EP00–EP13) that follow one request through the engine
 | State | Episodes |
 | --- | --- |
 | Done (subtitles and viewing guide committed) | EP00, EP01, EP02, EP03, EP04, EP07 (pilot) |
-| In progress | EP05 (script, storyboard, animation code and reviews exist; final cut not accepted) |
+| Video released; subtitles and viewing guide not committed | EP05 |
 | Not started | EP06, EP08–EP13 |
 
-Per-episode stage status lives in [`work/STATUS.md`](work/STATUS.md). Rendered `.mp4` files are not tracked; only subtitles and viewing guides are in [`work/release/`](work/release/).
+Per-episode stage status lives in [`work/STATUS.md`](work/STATUS.md). Rendered `.mp4` files are not tracked; they are published under [Releases](https://github.com/JerryLiu369/deepinfer-video/releases). Only subtitles and viewing guides are in [`work/release/`](work/release/).
 
 ### How it is made
 
