@@ -114,6 +114,10 @@ tools/make_episode.sh EP07 final                # 配音、渲染、合成一条
 
 正式配音用阿里云百炼的 Qwen-Audio-3.1-TTS-Plus，两个音色：解说 `longanhuan_v3.1`，提问者 `longanlingxin_v3.1`。凭据放在 `.env`（模板 `.env.example`，不入库）。没有 Key 时可用 `python tools/tts.py EPxx --backend edge` 免 Key 试听。选型与排错见 [`docs/09_PRODUCTION_PIPELINE.md`](docs/09_PRODUCTION_PIPELINE.md)。
 
+### 许可证
+
+[MIT](LICENSE)。
+
 ---
 
 ## English
@@ -168,3 +172,7 @@ cp -r examples/smoke /tmp/smoke && DV_WORK=/tmp/smoke tools/make_episode.sh EP99
 ```
 
 The knowledge base defaults to `../deepinfer-book/research`; override with `DV_KB`. Model IDs in `.opencode/agent/` use the author's provider naming; replace them with the IDs from `opencode models`. Then run `opencode`, switch to `showrunner`, and enter `/kickoff`.
+
+### License
+
+[MIT](LICENSE).
