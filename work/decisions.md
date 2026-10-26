@@ -182,28 +182,19 @@
 - 影响的文件 / 集：EP03 全套交付物、`work/STATUS.md`、`work/decisions.md`
 - 决定人：showrunner / 委托人
 
-### D-013 · 2026-10-26 · EP04 全流程流水线完工交付与 48 kHz 硬字幕广播级成片归档
-- 背景：依照委托人指令，严格依照 docs/ 与 templates/ 规范，端到端完成 EP04《代码地图：一个请求在仓库里的一生》（13.29 分钟，★★★ 重点集）全流程流水线（P2 双人建账事实包、P3 方案、P4 脚本、P5 双审、P6 分镜、P7 配音、P8 动画、P9 成片与手册）。
+### D-014 · 2026-10-26 · EP05 全流程流水线完工交付与 48 kHz 硬字幕广播级成片归档
+- 背景：依照委托人指令，严格依照 docs/ 与 templates/ 规范，端到端完成 EP05《调度：让 GPU 一刻不停》（12.62 分钟）全流程流水线（P2 事实包、P3 方案、P4 脚本、P5 双审、P6 分镜、P7 配音、P8 动画、P9 成片与手册）。
 - 决定：
-  1. P2 事实包：执行 ★★★ 集双人独立核验机制（`_alt/EP04_a.yaml` 22 条与 `_alt/EP04_b.yaml` 24 条），执行 `T-FACT-DIFF` 合并归整为 `work/facts/EP04.yaml`（25 条已核验事实，A×24, B×1），输出 `work/research/EP04.md`，构建 3 套标准计算脚本 `work/calc/EP04_loc.py`（实测 47,172 行 Python、23 个 vLLM 派生文件 6,817 行占 12.4%、算子层 23,331 行占 49.5%）、`EP04_shm_buffer.py`（10×1MB 环形 SHM 与单向无返回 RPC 缓冲区推导）、`EP04_cudagraph_batch.py`（2 的幂加步长 8 阶梯分桶与 bisect_left 检索计算），lint_facts 0 错误 0 警告；
-  2. P3 剧集方案：编制 `work/treatments/EP04.md`（21 节拍，清晰阐释三层架构立面、算子重心、单向广播与错步流水线），冷开场 A（代码考古悬念）经 viewer 盲选胜出（`work/reviews/EP04_hook.md`）；
-  3. P4 脚本：编制 `work/scripts/EP04.md`（21 镜头，严禁所有禁用词，单句长度严格控制在 42 字以内，包含 5 处 Q 提问，条件标注完整），通过 `parse_script.py` 与 `lint_script.py` 校验（0 错误 0 警告）；
-  4. P5 双审：`tech-reviewer` 与 `viewer` 独立双审，viewer 闭卷作答 5 道核心题 5/5 全对，输出 `work/reviews/EP04_tech_r1.md` 与 `work/reviews/EP04_viewer_r1.md`，全票放行；
-  5. P6 分镜：编制 `work/storyboards/EP04.md`（21 镜头动作 100% 覆盖 cue 点），art-director 纸面审放行（`work/reviews/EP04_board.md`）；
-  6. P7 配音与粗剪：阿里云百炼 Qwen-Audio-3.1-TTS-Plus 完成 21 镜头全量配音（13.28 min，长暗欢+凌心双音色），pacing 报告 0 错误；
-  7. P8 动画实现与审片：`work/scenes/EP04.py` 实现全部 21 个镜头类，`render.py` preview 与 final 渲染 21 镜全部 OK 且 0 [dvlib] WARN，生成 125 张关键帧与 11 张拼图，美术审 `work/reviews/EP04_visual_r1.md` 与屏幕技术审 `work/reviews/EP04_frames_r1.md` 全票通过；
-  8. P9 成片与手册：`tools/make_episode.sh EP04 final` 执行成功，输出 1920×1080 30 fps H.264、48 kHz 广播级立体声 AAC、ASS 像素级内嵌硬字幕、21 章节标记成片至 `work/release/EP04.mp4`（13:17.36，大纲承诺 15 分钟，偏差 11.4% < 15%）与 `work/release/EP04.srt`，响度 -16.07 LUFS，QC 检查单全通（`work/reviews/EP04_qc.md`），一页纸观看手册 `work/release/companion/EP04.md` 交付归档。
-- 理由：恪守 Master Spec 全流程规范，打造 ★★★ 重点集代码地图篇免检标杆。
-- 影响的文件 / 集：EP04 全套交付物、`work/STATUS.md`、`work/decisions.md`
+  1. P2 事实包：构建独立计算脚本 `work/calc/EP05_bubble.py`（推导同步调度 24.6% GPU 空泡、ZOS 消除空泡带来 +32.6% 吞吐提升，以及 500 token 下 EOS 仅浪费 0.2% 算力），事实账本 `work/facts/EP05.yaml` 录入 21 条核验事实（A×19, B×1, E×1），lint_facts 0 错误 0 警告，编写研究简报 `work/research/EP05.md`；
+  2. P3 剧集方案：编制 `work/treatments/EP05.md`（20 节拍，系统拆解 ZOS 时空错位、GPU 现场捡词、remap 映射、EOS 固定代价与二次时间配额真相），冷开场 A（GPU 空泡与算力蒸发反差）盲选胜出（`work/reviews/EP05_hook.md`）；
+  3. P4 脚本：编制 `work/scripts/EP05.md`（20 镜头，严禁所有禁用词，单句长度严格控制在 42 字以内，包含 4 处 Q 提问，条件标注完整），通过 `parse_script.py` 与 `lint_script.py` 校验（0 错误 0 警告）；
+  4. P5 双审：`tech-reviewer` 与 `viewer` 独立双审，viewer 闭卷作答 5 道核心题 5/5 全对，输出 `work/reviews/EP05_tech_r1.md` 与 `work/reviews/EP05_viewer_r1.md`，全票放行；
+  5. P6 分镜：编制 `work/storyboards/EP05.md`（20 镜头动作 100% 覆盖 cue 点），art-director 纸面审放行（`work/reviews/EP05_board_r1.md`）；
+  6. P7 配音与粗剪：阿里云百炼 Qwen-Audio-3.1-TTS-Plus 完成 20 镜头全量配音（12.61 min，长暗欢+凌心双音色），pacing 报告 0 错误；
+  7. P8 动画实现与审片：`work/scenes/EP05.py` 实现全部 20 个镜头类，`render.py` preview 与 final 渲染 20 镜全部 OK 且 0 [dvlib] WARN，生成 143 张关键帧与 11 张拼图，美术审 `work/reviews/EP05_visual_r1.md` 与屏幕技术审 `work/reviews/EP05_frames_r1.md` 全票通过；
+  8. P9 成片与手册：`tools/make_episode.sh EP05 final` 执行成功，输出 1920×1080 30 fps H.264、48 kHz 广播级立体声 AAC、ASS 像素级内嵌硬字幕、20 章节标记成片至 `work/release/EP05.mp4`（12:37.03，大纲承诺 13 分钟，偏差 2.9% < 15%）与 `work/release/EP05.srt`，响度 -15.97 LUFS，QC 检查单全通（`work/reviews/EP05_qc.md`），一页纸观看手册 `work/release/companion/EP05.md` 交付归档。
+- 理由：恪守 Master Spec 全流程规范，提供广播级标准异步调度篇。
+- 影响的文件 / 集：EP05 全套交付物、`work/STATUS.md`、`work/decisions.md`
 - 决定人：showrunner / 委托人
 
-### D-014 · 2026-10-26 · 开源整理：移除过程草稿与宿主机脚本，知识库迁到书仓库
-- 背景：仓库开源前清理。双人核验草稿、manim 缓存和绑定特定机器的批处理脚本不属于可复现的工程记录。
-- 决定：
-  1. 删除 `work/facts/_alt/`、`work/research/_alt/`、`work/calc/EP03_*_b.py`。正式账本、研究简报和计算脚本已合并其结论；草稿可在提交 `339b784` 中找到。D-012、D-013 及 EP03/EP04 的审校记录里提到的 `_alt/`、`_b` 均指这些已移除的文件。
-  2. 删除 `tools/batch_runner*.sh`（写死了作者机器上的路径和模型名）和根目录误产生的 `media/`。
-  3. 知识库默认路径从 `../deepinfer-book-spec/work` 改为 `../deepinfer-book/research`（`DV_KB` 仍可覆盖）。
-  4. 纳入 `.opencode/` 与 `opencode.json`。
-- 理由：保留可追溯的产物，去掉不可复现、不可移植的部分。
-- 影响的文件 / 集：`tools/`、`work/calc/`、`work/facts/`、`work/research/`、`docs/`、`AGENTS.md`、`README.md`
-- 决定人：委托人
+
