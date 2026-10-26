@@ -172,8 +172,14 @@ def main(argv=None):
         print("INFO  uppercase/digit tokens TTS will read as-is (add to tools/lexicon.yaml if wrong): "
               + ", ".join(sorted(ascii_terms)))
     tgt = data["target_min"]
-    if tgt and abs(total - tgt) / tgt > 0.2:
-        print(f"WARN  episode estimated {total:.1f} min vs target {tgt:.0f} min")
+    if tgt:
+        deviation = abs(total - tgt) / tgt
+        if deviation > 0.35:
+            errors.append(f"ERROR {a.episode}: estimated {total:.1f} min deviates > 35% from target {tgt:.0f} min (docs/02 outline). Script must expand beats to match spec.")
+        elif deviation > 0.15:
+            warns.append(f"WARN  {a.episode}: estimated {total:.1f} min vs target {tgt:.0f} min ({total / tgt - 1:+.0%})")
+    for line in errors + warns:
+        print(line)
     print(f"{a.episode}: {len(data['shots'])} shots, est {total:.1f} min, {len(errors)} errors, {len(warns)} warnings")
     sys.exit(1 if errors else 0)
 
