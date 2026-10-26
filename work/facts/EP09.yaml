@@ -1,0 +1,305 @@
+# EP09 事实账本（经 fact-checker 严格复核）
+episode: EP09
+facts:
+  - id: F09-01
+    claim: DeepInfer 投机解码中草稿模块类名为 DFlash，挂在 MTP_module 槽位；每请求草稿数/块长来自环境变量 DEEPINFER_USE_NEXTN_DECODE，默认值为 5，设为 0 可关闭投机解码。
+    screen: 草稿类 DFlash · 默认猜 5 个
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/deepseek.py:302"
+      - "deepinfer/model_executor/models/mtp/dflash.py:99-104"
+      - "deepinfer/environ.py:129-130"
+    quote: >-
+      self.MTP_module = DFlash(model, cfg, self.model.embed_tokens, self.lm_head) ;
+      self.max_MTP_value = envs.DEEPINFER_USE_NEXTN_DECODE
+    commit: 9bd9cf2
+    kb: [R09#1, R09#2]
+    conditions: 默认环境配置 DEEPINFER_USE_NEXTN_DECODE=5
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-02
+    claim: DFlash 的草稿生成不是 5 次自回归串行前向，而是用 [golden, noise×4] 构造成块，只做 1 次块并行前向（3 个草稿层遍历），串行前向次数与块长无关。
+    screen: 1 次块并行前向 · 非 5 次自回归
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:230-256"
+    quote: >-
+      draft_init_tokens = torch.full((req_cnt, self.dflash_block_size), fill_value=self.noise_token_id, ...) ;
+      draft_init_tokens[:, 0] = golden_tokens
+    commit: 9bd9cf2
+    kb: [R09#4]
+    conditions: V4.1-Flash 的 num_nextn_predict_layers 为 3 层
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-03
+    claim: DFlash 块内注意力是非因果的，5 个草稿位置共用同一份 kv_index 展开，覆盖最近 window_size 个已接受 token 与本块全部 5 个草稿槽位，草稿位置之间彼此可见。
+    screen: 块内双向可见 · 共享 kv_index
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/get_kv_index.py:183-197"
+      - "deepinfer/model_executor/models/v4_modules/attn.py:976-1008"
+    quote: >-
+      kv_index = kv_index_per_req.unsqueeze(1).expand(-1, dflash_block_size, -1).reshape(-1, padded_kv_len)
+    commit: 9bd9cf2
+    kb: [R09#3]
+    conditions: 写入草稿 K 发生在读取之前
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-04
+    claim: DFlash 依靠主干 forward 顺手收集的目标层特征注入，投影并写入 nextn SWA cache，不需要从头自回归重建上下文，也不用重复跑主干。
+    screen: 目标特征注入 · 复用主干上下文
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:198-228"
+      - "deepinfer/model_executor/models/deepseek.py:220-223"
+    quote: >-
+      dflash.update_main_cache(dflash_input, dflash_metadata, kv_caches)
+    commit: 9bd9cf2
+    kb: [R09#6]
+    conditions: 目标层 ID 由 dspark_target_layer_ids 配置
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-05
+    claim: DFlash 采样包含 5 步轻量串行循环，每步通过低秩 Markov 头（markov_w1 与 markov_w2）将前一个已采出的草稿 token 偏置加到下一个位置的 logits 上，补齐自回归依赖。
+    screen: 半自回归 · 5步Markov修正
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:290-339"
+      - "deepinfer/model_executor/models/v4_modules/heads.py:26-34"
+    quote: >-
+      if self.enable_markov: w1 = self.markov_w1(draft_token_ids); logits = self.markov_w2(w1, out_acc=logits)
+    commit: 9bd9cf2
+    kb: [R09#5]
+    conditions: 低秩 markov_rank 由模型配置给定，只做轻量向量查表与投影
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-06
+    claim: 草稿 KV 只活一个 decode 步，写入 SWA 环形缓冲槽位，被拒绝的草稿 KV 靠下一轮前向直接覆盖，不需要显式删除或内存截断。
+    screen: 零成本回退 · 下轮前向原地覆盖
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:206-208"
+      - "deepinfer/model_executor/models/v4_modules/attn.py:975-990"
+    quote: >-
+      # Draft keys live for one decode step and are overwritten by the next step.
+    commit: 9bd9cf2
+    kb: [R09#7]
+    conditions: 槽位由 (draft_positions % swa_block_size + state_offset) 计算
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-07
+    claim: 验证采样采用概率拒绝采样，判据为 U < exp(min(0, log q - log p))；残差分布重采样引入 DRAFT_PROB_PENALTY=5e-5 防止退化空分布，输出与目标分布仅有极小扰动。
+    screen: 概率拒绝采样 · 惩罚项 5e-5
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/fused_sample.py:232-246"
+      - "deepinfer/model_executor/layers/tilelang_ops/common.py:52-53"
+    quote: >-
+      residual = (sample_probs - (draft_logprobs - DRAFT_PROB_PENALTY).exp()).relu_() ;
+      accept_lp = torch.clamp(target_lp - draft_token_lp, max=0)
+    commit: 9bd9cf2
+    kb: [R09#15, R09#16]
+    conditions: U 由 (seq_seed, sample_position) 伪随机哈希生成
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-08
+    claim: ConfidenceHead 仅存在于最后一个草稿层，结构为线性层拼接隐藏态与 Markov embedding 并除以温度后过 sigmoid，为每个草稿位置输出一个 (0,1) 之间的接受概率标量。
+    screen: 置信度头 · 尾层带温 sigmoid
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:46-78"
+      - "deepinfer/model_executor/models/v4_modules/heads.py:102-105"
+      - "deepinfer/model_executor/layers/tilelang_ops/dflash.py:17"
+    quote: >-
+      Fused sigmoid(cat([hidden, markov_emb], -1) @ weight / temperature)
+    commit: 9bd9cf2
+    kb: [R09#8]
+    conditions: 仅第 MTP_num_layers-1 层挂载 AcceptRatePredictor
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-09
+    claim: 环境变量 DEEPINFER_DFLASH_CONFIDENCE_HEAD_TEMPERATURE 支持逗号分隔的 5 个温度浮点数，用于按位置进行校准以最小化累积乘积误差。
+    screen: 逐位置温度 · STS 序列校准
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/environ.py:134-143"
+    quote: >-
+      if "," in raw: parts = [float(x.strip()) for x in raw.split(",")]; ... if len(parts) != nextn: raise ValueError(...)
+    commit: 9bd9cf2
+    kb: [R09#9]
+    conditions: 默认值为 1.0；校准值来自外部离线流程
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-10
+    claim: C++ 调度器在 process_MTPInfo 中对每个请求的独立草稿置信度执行前缀累乘得到生存概率 a_j = Π_{k≤j} c_k，单调不增地存入 mtp.accept_rates。
+    screen: 前缀累乘 · 严格单调生存概率
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:1244-1252"
+    quote: >-
+      accept_rate *= confidence_data[i][j]; ... mtp.accept_rates.push_back(accept_rate);
+    commit: 9bd9cf2
+    kb: [R09#10]
+    conditions: 每步每请求在 CPU 上执行 O(nextn) 标量循环
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-11
+    claim: 引擎启动时对各 CUDA Graph 桶（默认按 8 等距）实测 5 次去极值取均值并在 EP 组内 all-reduce，构建吞吐曲线并按 sha256 键缓存到磁盘。
+    screen: 启动剖面 · 8 等距桶实测
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/model_runner.py:586-631"
+      - "deepinfer/worker/decode_perf_cache.py:40-52"
+      - "deepinfer/environ.py:155"
+    quote: >-
+      NUM_WARMUP = 1; NUM_MEASURE = 5; NUM_TRIM = 1 ... results.append((batch_size, avg_time_ms))
+    commit: 9bd9cf2
+    kb: [R09#19, R09#20]
+    conditions: 桶大小单位为验证 token 数 (total_q)，并非请求数
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-12
+    claim: 运行期通过实测 forward 耗时与基线耗时的残差中位数在线拟合 slope_ms，补偿上下文长度等动态影响；采样耗时用滑动窗口中位数估计。
+    screen: 在线斜率修正 · 滑动中位数补偿
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/mtp_varlen.hpp:44-47"
+      - "csrc/engine/mtp_varlen.hpp:139-148"
+    quote: >-
+      _forward_time_slope.update(graph_size, (forward_ms - baseline_ms) / graph_size);
+    commit: 9bd9cf2
+    kb: [R09#21]
+    conditions: 滑动窗口大小 5000，每个桶至少 10 个样本才计入
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-13
+    claim: CPU 调度器按累乘接受率降序排列全局候选，逐个累加计算 cur_expected / time_ms，以预期接受 token 数除以估计步耗时为目标函数全表扫描选出最佳总批量 best_bsz。
+    screen: 目标函数 · 预期接受数 ÷ 步耗时
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/mtp_varlen.hpp:228-258"
+    quote: >-
+      const double time_ms = baseline_ms + slope_ms * graph_size + sampler_ms;
+      const double cur_throughput = cur_expected / time_ms;
+      if (cur_throughput > best_throughput) { best_throughput = cur_throughput; best_bsz = cur_bsz; }
+    commit: 9bd9cf2
+    kb: [R09#12]
+    conditions: baseline_ms 来自第一个大于等于 cur_bsz 的 CUDA graph 桶
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-14
+    claim: 验证预算在批内所有请求间全局竞争，排序使得高置信度请求的第 5 个草稿位置可以优先于低置信度请求的第 1 个草稿位置获得验证名额。
+    screen: 全局预算竞争 · 高置信尾巴挤掉龙头
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/mtp_varlen.hpp:210-214"
+      - "csrc/engine/mtp_varlen.hpp:262-266"
+    quote: >-
+      std::sort(acc_queue_for_bsz.begin(), acc_queue_for_bsz.end(), by_rate_desc);
+    commit: 9bd9cf2
+    kb: [R09#24]
+    conditions: 排序键为降序接受率，并以请求下标作为 tie-break
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-15
+    claim: 调度器的预算计算队列与请求分配队列解耦，分别使用第 N-2 轮与第 N-1 轮的置信度，以保证图大小提早确定而请求长度可在稍后动态分配。
+    screen: 双队列 · N-2定预算 N-1定分配
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/mtp_varlen.hpp:160-168"
+      - "csrc/engine/mtp_varlen.hpp:203-207"
+    quote: >-
+      push_rates(acc_queue_for_bsz, post_process_paired ? mtp.prev_accept_rates : mtp.accept_rates, nd, i, has_draft);
+      push_rates(acc_queue_for_seqs_q, mtp.accept_rates, nd, i, has_draft);
+    commit: 9bd9cf2
+    kb: [R09#11]
+    conditions: 避免后序 token 置信度反向影响前序 token 验证资格
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-16
+    claim: 在 ZOS 异步调度下，CPU 仅定总预算 total_q，逐请求的 seqlen_q 改由 GPU 上的 TileLang 内核使用最新置信度做累乘、全局 argsort 与 remap scatter 完成重算。
+    screen: ZOS 异步 · GPU内核现场重排
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:218-231"
+      - "deepinfer/model_executor/layers/tilelang_ops/schedule_mtp_varlen.py:54-98"
+      - "doc/inference_deployment_qa.md:264-266"
+    quote: >-
+      compute_seqlens_q_by_confidence_rates(total_q, remap[:n_seq], prev.sampler_output.confidence_rates_gpu, seqlens_q[:n_seq])
+    commit: 9bd9cf2
+    kb: [R09#22]
+    conditions: 仅重算请求间分配，总预算 total_q 保持不变
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-17
+    claim: 官方实测在 EP64/DP64 配置下，约 60 并发生产工作点动态变长验证使平均验证长度由 5 降至 3.58，接受长度保持 3.21（固定为 3.30），估计吞吐提升 +5.4%（48~72 并发落在 +4~7% 区间）；并发 16 时反而 -1.5%。
+    screen: 60并发+5%·16并发-1.5%
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:245-256"
+    quote: >-
+      Computed from EP64/DP64 benchmark data, that works out to +4–7% throughput at the production operating point (~60 concurrent sequences per rank).
+    conditions: 硬件为 EP64/DP64 评测环境，数字为 estimated throughput (tok/s/rank)
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-18
+    claim: 16 并发亏损与 60 并发增益的反差源于曲线形状与桶跨度：16 并发裁剪 9 个 token 仅跨最多 1 个桶，因固定基线延迟主导无法抵消 2.4% 接受损失；60 并发跨 11 个桶，算力主导下节省时间显著超过接受损失。
+    screen: 根因：桶跨度差异与延迟地板
+    grade: E
+    status: verified_with_caveat
+    evidence:
+      - "doc/inference_deployment_qa.md:249-256"
+      - "deepinfer/environ.py:155"
+      - "csrc/engine/mtp_varlen.hpp:235-245"
+    calc: calc/EP09_curves.py
+    conditions: 基于 8 等距桶与官方基准数据的理论与几何推导
+    caveat: 官方仅给出吞吐估计值，具体各桶毫秒基线与权重比例属于理论推断
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-19
+    claim: 环境变量 DEEPINFER_ENABLE_MTP_VARLEN 控制是否在启动时剖面曲线与是否启用 GPU 重算；确定性采样要求每个请求验证长度独立，因此开启确定性采样时必须关闭变长验证。
+    screen: 变长开关与确定性约束
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/base.py:275-281"
+      - "deepinfer/environ.py:131"
+      - "csrc/engine/mtp_varlen.hpp:153-158"
+      - "README.md:27"
+    quote: >-
+      if envs.DEEPINFER_ENABLE_MTP_VARLEN: self.decode_perf_curve = self.model_runner.profile_decode_perf()
+    commit: 9bd9cf2
+    kb: [R09#23, R11#2]
+    conditions: 曲线为空时调度器自动退化为固定 1+draft 长度
+    verified_by: fact-checker@2026-10-26
+
+  - id: F09-20
+    claim: DSpark 方案来自 DeepSeek 与北京大学合作论文 arXiv:2607.05147，其草稿并行基础源自 UCSD 的 DFlash 块扩散论文 arXiv:2602.06036，SGLang 与 vLLM 随后均实现了相应支持。
+    screen: 出处：DSpark/DFlash 论文
+    grade: B
+    status: verified
+    evidence:
+      - "arXiv:2607.05147 (DSpark)"
+      - "arXiv:2602.06036 (DFlash)"
+      - "doc/inference_deployment_qa.md:243"
+    quote: >-
+      At the inference system level, DSpark uses variable-length verification.
+    conditions: 外部论文公开资料，2026年成果
+    verified_by: fact-checker@2026-10-26

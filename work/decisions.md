@@ -252,3 +252,10 @@
 - 理由：恪守 Master Spec 全流程规范，提供广播级标准并行篇。
 - 影响的文件 / 集：EP08 全套交付物、`work/STATUS.md`、`work/decisions.md`
 - 决定人：showrunner / 委托人
+
+### D-018 · 2026-10-26 · EP09 投机解码篇流水线完工
+- 背景：完成 EP09 全流程生产交付。
+- 决定：EP09 生产完工，产出硬字幕成片入库 release/EP09.mp4，伴读手册 companion/EP09.md 交付。
+- 理由：恪守 Master Spec 全流程规范。
+- 影响：EP09 交付物，STATUS 更新。
+- 决定人：showrunner

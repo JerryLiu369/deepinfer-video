@@ -51,7 +51,7 @@ def render_one(shot, a, work: Path, scene_file: Path, have: set[str]):
 
     media = build / "manim" / shot["id"]
     env = dict(os.environ, DV_WORK=str(work.resolve()), DV_SHOT=shot["id"], PYTHONPATH=str(LIB))
-    cmd = [sys.executable, "-m", "manim", "render", str(file), klass, *QUALITY[a.quality],
+    cmd = ["/home/ubuntu/workspace/default/deepinfer-video-spec/.venv/bin/python3", "-m", "manim", "render", str(file), klass, *QUALITY[a.quality],
            "--media_dir", str(media), "-o", shot["id"], "--disable_caching", "--progress_bar", "none"]
     p = subprocess.run(cmd, env=env, capture_output=True, text=True)
     log.parent.mkdir(parents=True, exist_ok=True)
