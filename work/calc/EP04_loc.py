@@ -6,9 +6,8 @@
 import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "deepinfer-book-spec" / "work" / "sources" / "DeepInfer"
-if not REPO_ROOT.exists():
-    REPO_ROOT = Path("/home/ubuntu/workspace/default/deepinfer-book-spec/work/sources/DeepInfer")
+_KB = Path(os.environ.get("DV_KB") or Path(__file__).resolve().parents[3] / "deepinfer-book" / "research")
+REPO_ROOT = _KB / "sources" / "DeepInfer"
 
 def count_lines(p: Path) -> int:
     try:

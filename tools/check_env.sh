@@ -3,7 +3,7 @@
 # Usage: tools/check_env.sh [path-to-knowledge-base]
 #   DV_CHECK_TTS=1 tools/check_env.sh   # also synthesize one test sentence with the active TTS backend
 T=$(cd "$(dirname "$0")" && pwd)
-KB=${1:-${DV_KB:-../deepinfer-book-spec/work}}
+KB=${1:-${DV_KB:-../deepinfer-book/research}}
 if [ -z "${PYTHON:-}" ]; then
   if [ -x "$T/../.venv/bin/python" ]; then
     PY="$T/../.venv/bin/python"

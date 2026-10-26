@@ -9,6 +9,8 @@
 
 # Intermediate build and rendering directories
 work/build/
+# Manim output when run from the repo root by mistake (render.py writes under work/build/)
+/media/
 
 # Large release video binaries (hosted via GitHub Releases / Bilibili, keep repo lightweight)
 work/release/*.mp4

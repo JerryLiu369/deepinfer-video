@@ -76,7 +76,7 @@ token 不是瓶颈，**质量和一致性**才是。多花 token 的地方：
 
 ## 3. 知识库
 
-上一轮"写一本书"的项目留下了大量可复用的材料，路径默认是 `../deepinfer-book-spec/work`（环境变量 `DV_KB`）：
+上一轮"写一本书"的项目留下了大量可复用的材料，路径默认是 `../deepinfer-book/research`（环境变量 `DV_KB`）：
 
 - `sources/`：DeepInfer、vLLM、SGLang、deepseek-recipe 的源码克隆，版本见 `versions.md`
 - `notes/R01–R18`：18 份结构化研究笔记，带 `路径:行号` 证据与等级

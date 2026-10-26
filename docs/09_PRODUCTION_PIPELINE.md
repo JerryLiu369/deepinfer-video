@@ -11,7 +11,7 @@ work/
 ├── decisions.md           # 决策记录（所有对规范的偏离、基线变更、P0 校准结果）
 ├── open_questions.md      # 未解决的事实问题
 ├── glossary.md            # 术语表（showrunner 维护）
-├── facts/                 # 事实账本 EPxx.yaml、GLOBAL.yaml；_alt/ 双人核验草稿
+├── facts/                 # 事实账本 EPxx.yaml、GLOBAL.yaml；_alt/ 双人核验草稿（合并成正式账本后即删除，不入库）
 ├── calc/                  # 计算脚本 EPxx_*.py
 ├── research/              # 研究简报 EPxx.md；queries/ 技术短问
 ├── treatments/            # 剧集方案

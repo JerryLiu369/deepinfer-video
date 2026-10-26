@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "google/gemini-3.8-flash",
+  "model": "axon-responses/gemini-3.8-flash",
   "permission": {
     "edit": "allow",
     "bash": "allow",

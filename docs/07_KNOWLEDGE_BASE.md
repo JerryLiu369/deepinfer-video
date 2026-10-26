@@ -4,7 +4,7 @@
 
 ## 1. 位置与内容
 
-默认路径 `../deepinfer-book-spec/work`（相对本 Spec 根目录），可用环境变量 `DV_KB` 改。
+默认路径 `../deepinfer-book/research`（相对本 Spec 根目录），可用环境变量 `DV_KB` 改。
 
 | 路径 | 内容 | 可信度 | 用法 |
 | --- | --- | --- | --- |

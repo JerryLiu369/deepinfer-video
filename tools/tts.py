@@ -3,7 +3,7 @@
 
 Backends:
   qwen     (recommended, default) Alibaba Cloud Bailian Qwen-Audio-3.1-TTS-Plus via tools/qwen_tts.py.
-           Needs DASHSCOPE_API_KEY etc. in deepinfer-video-spec/.env. Supports tone instructions.
+           Needs DASHSCOPE_API_KEY etc. in deepinfer-video/.env. Supports tone instructions.
   edge     Microsoft Edge online TTS via the edge-tts package: no key, no tone control. Fallback.
   command  any local TTS; set DV_TTS_CMD, e.g.
            'python my_tts.py --speaker {speaker} --text-file {text} --out {out}'
@@ -114,7 +114,7 @@ def resolve(a) -> dict:
     if backend == "qwen":
         st = qwen_tts.settings()
         if not st["api_key"]:
-            sys.exit("backend qwen needs DASHSCOPE_API_KEY (deepinfer-video-spec/.env, see .env.example); "
+            sys.exit("backend qwen needs DASHSCOPE_API_KEY (deepinfer-video/.env, see .env.example); "
                      "for a no-key build use --backend edge")
         tones = qwen_tts.voice_config()["tones"]
         model = st["model"]

@@ -17,7 +17,7 @@
 ## 路径约定
 
 - 规范：`docs/`；模板：`templates/`；工具：`tools/`；动画库：`manim_lib/dvlib.py`
-- 知识库：环境变量 `DV_KB`，默认 `../deepinfer-book-spec/work`（`notes/`、`sources/`、`versions.md`）
+- 知识库：环境变量 `DV_KB`，默认 `../deepinfer-book/research`（`notes/`、`sources/`、`versions.md`）
 - 工作区：`work/`（结构见 `docs/09_PRODUCTION_PIPELINE.md` 第 1 节）
 - 集号：`EP00`–`EP13`；镜头号：`EP07-S03`；事实号：`F07-03`（跨集共用为 `G-xx`）
 

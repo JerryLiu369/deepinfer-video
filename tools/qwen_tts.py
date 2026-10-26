@@ -6,7 +6,7 @@ Used two ways:
   - as a CLI for one-off tests:
       python tools/qwen_tts.py --text "你好" --out /tmp/t.wav [--speaker n|q] [--voice ID] [--instruction "..."]
 
-Configuration comes from the environment, with deepinfer-video-spec/.env loaded first
+Configuration comes from the environment, with deepinfer-video/.env loaded first
 (existing environment variables win). Keys: DASHSCOPE_API_KEY (required), DASHSCOPE_ENDPOINT,
 DASHSCOPE_MODEL, DASHSCOPE_PROXY (unset or empty = direct connection), DASHSCOPE_IPV4_ONLY
 (default 1: resolve hosts to IPv4 only, for IP-whitelisted endpoints). Voices and tone
@@ -106,7 +106,7 @@ def synthesize(text: str, out_path: Path, speaker: str = "n", voice: str | None 
                instruction: str | None = None, retries: int = 4, timeout: float = 60) -> None:
     s = settings()
     if not s["api_key"]:
-        raise ValueError("DASHSCOPE_API_KEY is not set (put it in deepinfer-video-spec/.env)")
+        raise ValueError("DASHSCOPE_API_KEY is not set (put it in deepinfer-video/.env)")
     if s["ipv4_only"]:
         _force_ipv4()
     vc = voice_config()

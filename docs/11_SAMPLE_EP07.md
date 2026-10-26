@@ -18,7 +18,7 @@ EP07 是试点集，也是全系列的样板。`examples/ep07_sample/` 里放着
 验证命令（在本 Spec 根目录）：
 
 ```bash
-python tools/lint_facts.py EP07 --work examples/ep07_sample --kb "${DV_KB:-../deepinfer-book-spec/work}"
+python tools/lint_facts.py EP07 --work examples/ep07_sample --kb "${DV_KB:-../deepinfer-book/research}"
 python tools/parse_script.py EP07 --work examples/ep07_sample
 python tools/lint_script.py EP07 --work examples/ep07_sample
 python examples/ep07_sample/calc/EP07_rows.py
