@@ -24,8 +24,6 @@ env/
 .ruff_cache/
 
 # Agent execution runtime artifacts (keep git repo clean)
-.opencode/
-opencode.json
 .codex/
 tsv.txt
 
