@@ -1,0 +1,63 @@
+# Spoken forms for terms the Chinese TTS voice reads badly.
+# Applied to narration only (subtitles keep the written form), longest key first,
+# ASCII keys match on word boundaries. Inline {written|spoken} in a script wins.
+# Calibrate in P0 with the production backend (qwen): listen to tools/tts.py output of
+# examples/smoke and adjust. Entries were first tuned on Edge voices; drop ones qwen reads fine.
+DeepInfer: Deep Infer
+DeepSeek-V4.1-Flash: DeepSeek V4.1 Flash
+V4.1-Flash: V4.1 Flash
+vLLM: v L L M
+SGLang: S G Lang
+TensorRT-LLM: TensorRT L L M
+KV cache: K V cache
+KV: K V
+SWA: S W A
+YOCO: Y O C O
+CED: C E D
+ZOS: Z O S
+MoE: M o E
+MTP: M T P
+DSpark: D Spark
+DFlash: D Flash
+EPLB: E P L B
+Wide-EP: Wide E P
+EP: E P
+DP: D P
+TP: T P
+CP: C P
+P/D: P D
+E/P/D: E P D
+TTFT: T T F T
+TPOT: T P O T
+TBT: T B T
+HBM: H B M
+NVLink: N V Link
+RDMA: R D M A
+SM100: S M 一百
+3FS: 三 F S
+FP4: F P 四
+FP8: F P 八
+MXFP4: M X F P 四
+MXFP8: M X F P 八
+FlashMLA: Flash M L A
+MLA: M L A
+MQA: M Q A
+DeepGEMM: Deep GEMM
+DeepEP: Deep E P
+TileLang: Tile Lang
+CUDA Graph: CUDA Graph
+GPU: G P U
+CPU: C P U
+NPU: N P U
+LLM: L L M
+API: A P I
+B/token: 字节每 token
+GB/s: G B 每秒
+PiB: P i B
+README: Read me
+# "EP" matches on word boundaries only, so parallel sizes need their own keys.
+EP8: E P 八
+EP16: E P 十六
+EP32: E P 三十二
+EP64: E P 六十四
+EP128: E P 一百二十八

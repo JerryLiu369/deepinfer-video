@@ -1,0 +1,168 @@
+# EP02 事实账本。格式：docs/05_FORMATS.md 第 1 节；流程：docs/06_FACT_PROTOCOL.md。
+# 校验：python tools/lint_facts.py EP02 --kb "$DV_KB"
+episode: EP02
+facts:
+  - id: F02-01
+    claim: >-
+      DeepInfer 官方开源定位：作为 DeepSeek 大规模云服务生产环境的离线推理框架（offline inference），核心特性专为单模型 DeepSeek-V4.1-Flash 设计，官方支持 NVIDIA SM100 GPU 与华为昇腾 Ascend 950 NPU。
+    screen: 离线推理·专供V4.1
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:1-8"
+      - "README.md:33-36"
+      - "doc/inference_deployment_qa.md:17-19"
+    kb: [R01#3]
+    conditions: "官方开源发布说明"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-02
+    claim: >-
+      DeepInfer 官方特性列表覆盖完整的核心调度与算子能力：包含基于 TileLang 的硬件算子库、注意力 DP/CP 与 MoE 宽 EP + EPLB 并行、DSpark 投机解码、SWA 有界重放、ZOS 异步调度、批不变推理（Batch-invariant）、确定性采样及结构化输出。
+    screen: 核心调度与算子特性
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:9-31"
+    kb: [R01#3]
+    conditions: "官方开源支持特性清单"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-03
+    claim: >-
+      完整在线服务所需的"三大缺失组件"：官方 README 与技术问答明确指出，本开源发布不包含分布式 KV cache 系统、VE/Prefill/Decode 三段物理分离部署机制、以及跨数据并行副本的在线负载均衡器。
+    screen: 缺KV·缺分离·缺路由
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:38-42"
+      - "doc/inference_deployment_qa.md:21-23"
+    kb: [R01#3, R01#4]
+    conditions: "官方开源发布缺件清单"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-04
+    claim: >-
+      生产系统的整体物理拓扑：DeepSeek 生产环境采用 E/P/D（Entrypoint / Prefill / Decode）三段分离架构与专用 3FS 集中式存储集群；Prefill 节点采用算力受限的标准 8 卡机（EP2–8/DP2–8），Decode 节点采用宽专家并行超节点（EP64–128/DP64–128），最小高效服务单元为 64P + 64D（共 128 张 GPU）。
+    screen: E/P/D三段分离超节点
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:41-67"
+    kb: [R12#1, R12#2, R12#4]
+    conditions: "生产部署拓扑与最小服务单元（128卡）"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-05
+    claim: >-
+      集中式 KV 存储架构与容量配比：官方生产系统要求 KV Cache 留存超过 72 小时；每张在线 GPU 对应约 14.4 TB 逻辑存储容量；单台 3FS 存储服务器配备 20 块 30.73 TB NVMe SSD（裸容量 614.6 TB），提供至少 40 GB/s 读带宽与 5 GB/s 写带宽（读写比 8:1），采用 10+2 纠删码冗余保护。
+    screen: 3FS存储比14.4TB/卡
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:75-91"
+      - "calc/EP02_capacity.py:27-50"
+    calc: calc/EP02_capacity.py
+    kb: [R12#6, R12#9, R12#10]
+    conditions: "官方生产存储节点硬件配置（20盘/机）与容量配比（14.4TB/卡）"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-06
+    claim: >-
+      官方生产规模与营收数据：DeepSeek 单一生产集群服务吞吐达到每天 155 万亿（155×10¹²）Tokens（平均每秒聚合产出约 179.4 万 Tokens），整体收入为每卡每小时 38 美元（按官方公布的谷时优惠定价口径折算，属于整体营收而非净利润）。
+    screen: 155万亿token/天 $38/时
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:17-18"
+      - "calc/EP02_capacity.py:10-25"
+    calc: calc/EP02_capacity.py
+    kb: [R01#2, R12#6]
+    conditions: "单一生产集群、谷时定价口径、整体收入而非利润"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-07
+    claim: >-
+      开源代码中的"架构插槽"机制：开源代码完整保留了为三段分离与分布式存储预留的机制插槽，包括 EngineType 枚举的 NORMAL/PROMPT/COMPLETION 三态、LLMEngine 中 7 个空虚函数（init_pd_split、post_schedule、do_save_kvcache、pe_prepare_save_kvcache、pe_do_save_kvcache、process_output、send_processed_prompts），以及恒返回 False 的 should_copy_state。
+    screen: 开源保留完整接口插槽
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/engine_type.py:4-17"
+      - "deepinfer/engine/llm_engine.py:801-850"
+      - "csrc/engine/scheduler.hpp:39-43"
+    commit: 9bd9cf2
+    kb: [R12#1, R12#66, R12#69]
+    conditions: "代码中显式预留但未填补实现的虚函数与枚举定义"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-08
+    claim: >-
+      调度器内部的请求移交接缝：C++ 调度器中明确标注 prefill_engine won't change status because it will be transferred to complete_engine；在 COMPLETION 引擎中禁止抢占后重算（必须设置 stop_preempted_request=true）；Sequence 结构体原生暴露 num_cached_tokens 与 state_id，为外部注入已计算 KV 预留了数据结构接缝。
+    screen: C++调度移交与缓存接缝
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:941-943"
+      - "csrc/engine/scheduler.hpp:101-104"
+      - "csrc/engine/pybind_sequence.cpp:126-134"
+    commit: 9bd9cf2
+    kb: [R12#71, R12#72, R12#74]
+    conditions: "C++ 调度核心移交逻辑与只读属性绑定"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-09
+    claim: >-
+      显存状态复制机制与半成品痕迹：LLMEngine 内部定义了显存副本缓冲区 copy_state 与 GPU 拷贝逻辑（copy_state[state_id].copy_ 并记录 last_copy_state_token_idx），与文档中每跨 128 边界向显存副本区拷贝一次当前窗口以备存储的机制完全吻合，但开源版中 copy_state 初始化为 None 且判定方法恒为 False。
+    screen: 状态副本区机制半成品
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:284-285"
+      - "deepinfer/engine/llm_engine.py:787-798"
+      - "deepinfer/engine/llm_engine.py:930-937"
+    commit: 9bd9cf2
+    kb: [R12#73]
+    conditions: "开源版本中预留的异步显存拷贝骨架"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-10
+    claim: >-
+      deepseek-recipe 开源生态定位：独立开源 Rust 库（提供 PyO3 绑定），负责模型外部 API 请求的端到端编解码；包含兼容 OpenAI 与 Anthropic 的三套协议转换、基于 BPE 词表剥离与并行编码的 Prompt 防特殊 Token 注入机制、11 阶段流式输出解析状态机（支持思考标签与 DSML 工具调用解析）以及 OpenCV 图片预处理。
+    screen: recipe：外部编解码与协议
+    grade: B
+    status: verified
+    evidence:
+      - "deepseek-recipe/README.md:1-50"
+      - "doc/inference_deployment_qa.md:17-19"
+    kb: [R12#54, R12#55, R12#56, R12#61]
+    conditions: "deepseek-recipe 独立开源库功能范围"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-11
+    claim: >-
+      官方开源历史演进与动机原话：2025 年 4 月官方曾因代码分叉过深、内部基建耦合及研发人力受限三项挑战而暂缓开源整仓并转向生态合作；2026 年 10 月正式开源 DeepInfer，官方 X 唯一陈述的开源动机为分享生产技术栈以帮助社区降低算力成本、减少能耗、使 AI 更可负担；知乎与英文 QA 文档明确指出开源范围通过剥离与内部基础设施深耦合的 KV 管理与负载均衡组件来实现。
+    screen: 开源演进与官方动机
+    grade: B
+    status: verified
+    evidence:
+      - "https://x.com/deepseek_ai/status/2112476496283775135"
+      - "doc/inference_deployment_qa.md:21-23"
+    kb: [R01#1, R01#5, R01#6]
+    conditions: "2025-04 说明与 2026-10 开源公告"
+    verified_by: fact-checker@2026-10-26
+
+  - id: F02-12
+    claim: >-
+      跨机房与跨实例 KV 通信网络带宽成本：在 P/D 分离部署下，SWA KV 与全局 Block KV 共用同一条 P 到 D 传输通道；跨机命中依赖 Entrypoint 维护的内存目录并经由 400G VLAN 拉回；当跨数据中心部署 P 与 D 时，每 8 张 GPU 需预留约 400 Gbps 互联互通带宽预算（即平均每卡 50 Gbps）。
+    screen: 跨机400G与50G/卡预算
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:71-73"
+      - "doc/inference_deployment_qa.md:171-177"
+      - "calc/EP02_capacity.py:72-85"
+    calc: calc/EP02_capacity.py
+    kb: [R12#5, R12#33]
+    conditions: "跨机房部署互联带宽预算（400 Gbps/8卡）"
+    verified_by: fact-checker@2026-10-26

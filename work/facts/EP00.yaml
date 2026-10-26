@@ -1,0 +1,153 @@
+# EP00 事实账本。格式：docs/05_FORMATS.md 第 1 节；流程：docs/06_FACT_PROTOCOL.md。
+# 校验：python tools/lint_facts.py EP00 --kb "$DV_KB"
+episode: EP00
+facts:
+  - id: F00-01
+    claim: >-
+      DeepSeek 于 2026 年 10 月 20 日正式开源大规模云服务推理框架 DeepInfer，采用 Apache 2.0 许可证。
+    screen: 2026-10-20 开源发布
+    grade: B
+    status: verified
+    evidence:
+      - "LICENSE:1-3"
+      - "README.md:1-5"
+      - "https://x.com/deepseek_ai/status/2112476496283775135"
+    kb: [R01#1]
+    conditions: "官方开源发布事实"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-02
+    claim: >-
+      DeepInfer 开源版本提供大规模离线推理能力（offline inference），并且仅支持单一模型 DeepSeek-V4.1-Flash。
+    screen: 离线推理 · 仅支持V4.1-Flash
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:3-7"
+      - "doc/inference_deployment_qa.md:17-19"
+    kb: [R01#3]
+    conditions: "开源版本限定范围"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-03
+    claim: >-
+      完整生产推理服务所需的 KV cache 系统、Prefill/Decode 分离部署机制以及副本间负载均衡未包含在开源版本中。
+    screen: 缺KV存储·PD分离·负载均衡
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:38-42"
+      - "doc/inference_deployment_qa.md:21-22"
+    kb: [R01#3, R01#4]
+    conditions: "README 明确声明的不包含组件"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-04
+    claim: >-
+      DeepSeek 官方单一生产集群服务吞吐达到每天 155 万亿 Tokens，整体收入为每卡每小时 38 美金（按谷时定价折算）。
+    screen: 155万亿token/天 $38/时
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:17-18"
+      - "https://zhuanlan.zhihu.com/p/2095560295930508953"
+    kb: [R01#2]
+    calc: calc/EP00_metrics.py
+    conditions: "DeepSeek 单一生产集群、谷时定价口径、整体收入而非利润"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-05
+    claim: >-
+      DeepInfer 官方支持两套硬件平台：NVIDIA SM100 GPU 与华为昇腾 Ascend 950 NPU。
+    screen: SM100 / 昇腾 950
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:33-36"
+    kb: [R01#0.1, R10#1]
+    conditions: "官方声明支持的硬件架构"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-06
+    claim: >-
+      DeepSeek 官方在 X 发布的开源动机原话为：分享生产栈以帮助社区降低计算成本、减少能耗、使 AI 更可负担。
+    screen: 官方开源动机：降成本·降能耗
+    grade: B
+    status: verified
+    evidence:
+      - "https://x.com/deepseek_ai/status/2112476496283775135"
+    kb: [R01#1]
+    conditions: "官方 X 2026-10-20 原文"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-07
+    claim: >-
+      DeepInfer 的所有特色设计均可追溯至三个源头：模型结构（YOCO/SWA/MTP）、部署形态（P/D分离/宽EP/3FS外置）与生产需求（双硬件支持/批不变/确定性）。
+    screen: 三源头：模型·部署·生产
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:3-16"
+      - "docs/01_SERIES_BIBLE.md:5-15"
+    kb: [R01#1, R01#2]
+    conditions: "全系列核心分析体系"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-08
+    claim: >-
+      系列贯穿案例设为"第五轮请求"：已完成四轮对话的编程 agent 发来约 6 万 token 上下文，要求输出结构化 JSON 修改计划。
+    screen: 贯穿案例：第五轮约6万token
+    grade: E
+    status: verified
+    evidence:
+      - "docs/01_SERIES_BIBLE.md:37-43"
+    conditions: "示意：虚构典型请求设定，非真实线上流量"
+    caveat: "贯穿案例为教学分析所设立的示意请求，用于串联长前缀命中、重放与解码"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-09
+    claim: >-
+      视频右上角显示证据等级角标：A 代码证实（绿）、B 官方文档（蓝）、C 第三方实测（紫）、D 社区说法（灰）、E 推断示意（金）。
+    screen: 证据角标：A/B/C/D/E
+    grade: B
+    status: verified
+    evidence:
+      - "docs/06_FACT_PROTOCOL.md:7-14"
+    conditions: "视频规范定义"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-10
+    claim: >-
+      视频右上角显示开源范围标签：开源代码里有（绿）、仅文档描述·未开源（琥珀）、代码+文档（蓝）、通用概念（灰）。
+    screen: 范围标签：开源绿·未开源琥珀
+    grade: B
+    status: verified
+    evidence:
+      - "docs/01_SERIES_BIBLE.md:28-30"
+    conditions: "视频规范定义"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-11
+    claim: >-
+      本系列所有代码分析均基于源码 commit 9bd9cf2 与官方公开文档静态分析，未在真实硬件 SM100 或昇腾 950 上实际运行过。
+    screen: 静态分析 · 无硬件实测
+    grade: B
+    status: verified
+    evidence:
+      - "docs/00_MASTER_SPEC.md:4"
+      - "README.md:33-36"
+    conditions: "全片事实边界声明"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F00-12
+    claim: >-
+      全系列共规划 14 集，总时长约 200 分钟，从 EP00 导览开始，跟随一个请求的生命周期逐站剖析至 EP13 系列统合。
+    screen: 全系列14集 · 约200分钟
+    grade: B
+    status: verified
+    evidence:
+      - "docs/02_EPISODE_OUTLINE.md:1-35"
+      - "docs/00_MASTER_SPEC.md:284-288"
+    calc: calc/EP00_metrics.py
+    conditions: "系列大纲规划汇总"
+    verified_by: fact-checker@2026-10-25

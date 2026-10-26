@@ -1,0 +1,341 @@
+# EP05 事实账本：调度：让 GPU 一刻不停
+# 代码基线：deepseek-ai/DeepInfer @ 9bd9cf243fc53ef9afbf8f04d391d989117d6ab9 (2026-10-21)
+episode: EP05
+facts:
+  - id: F05-01
+    claim: >-
+      ZOS（Zero-Overhead Scheduling）的核心机制是让 GPU 执行第 N 步模型计算的同时，CPU 并发处理第 N-1 步的输出并调度准备第 N+1 步，从而消除 CPU 调度开销对 GPU 造成的等待空泡。
+    screen: ZOS：GPU算当前·CPU整前后
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:96-103"
+      - "deepinfer/worker/worker.py:182-187"
+    quote: >-
+      1. Forward current step (main model); 2. Post-process previous step; 3. Sample current step; 4. Post-process current step: in place for prompt / non-ZOS steps; ZOS decode steps defer it to the next step to overlap with forward
+    commit: 9bd9cf2
+    kb: [R05#11, R05#12]
+    conditions: 官方核心执行入口 execute_model_step 规范；NORMAL 与 COMPLETION 引擎默认开启
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-02
+    claim: >-
+      在传统的同步调度时间线中，GPU 跑完第 N 步的 forward 与 sample 之后，CPU 必须阻塞等待 GPU 完成，并在 CPU 执行后处理与下一步调度期间让 GPU 完全空闲，产生 15%–30% 的 GPU 空泡。
+    screen: 同步调度：CPU干活·GPU空转
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:262-263"
+      - "csrc/engine/scheduler.hpp:881-887"
+    quote: >-
+      with cpu_timer.record("worker.post_process.sync"): step_state.sample_end_evt.synchronize()
+    commit: 9bd9cf2
+    calc: calc/EP05_bubble.py
+    kb: [R05#13, R05#Q2]
+    conditions: non-ZOS 模式下每个 step 均当场同步等待；典型前向耗时 4.6 ms 时 CPU 额外耗时 1.5 ms（空泡占比 24.6%）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-03
+    claim: >-
+      worker.py 中的 execute_model_step 固定分为四段：当前步前向（Forward）、上一步后处理（Post-process prev）、当前步采样（Sample）、当前步后处理（Post-process curr）。
+    screen: 四段式骨架：前向-上步-采样-后处理
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:98-102"
+      - "deepinfer/worker/worker.py:122-187"
+    quote: >-
+      1. Forward current step (main model); 2. Post-process previous step; 3. Sample current step; 4. Post-process current step
+    commit: 9bd9cf2
+    kb: [R05#11]
+    conditions: 全局所有步类型（prompt/decode、ZOS开/关、陪跑步）统一走该四段式入口
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-04
+    claim: >-
+      ZOS 异步重叠仅在连续的 decode 步之间生效；prefill（prompt）步仍为纯同步执行并在当场完成两次后处理，会强制排空异步流水线，且 prefill 之后的第一步 decode 没有可重叠对象。
+    screen: ZOS仅限连续解码·Prefill纯同步
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:182-187"
+      - "deepinfer/worker/worker.py:198-200"
+    quote: >-
+      if is_prompt or not envs.DEEPINFER_ZERO_OVERHEAD_SCHEDULING: request_outputs = np.concatenate([request_outputs, self._post_process_step(curr_step_state)]); self.prev_step_state = None
+    commit: 9bd9cf2
+    kb: [R05#1, R05#12]
+    conditions: 源码硬编码逻辑；is_prompt=True 时立即执行 synchronize 并清空 prev_step_state
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-05
+    claim: >-
+      ZOS 下 CPU 的等待点后移到上上轮的采样事件（sample_end_evt），由于该事件在 GPU 流上排在当前步 forward 之前，CPU 真正调用 synchronize 时 GPU 早已完成，CPU 实现近乎零等待。
+    screen: 等待点后移：上轮事件早已就绪
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:167-168"
+      - "deepinfer/worker/worker.py:262-263"
+    quote: >-
+      with cpu_timer.record("worker.post_process.sync"): step_state.sample_end_evt.synchronize()
+    commit: 9bd9cf2
+    kb: [R05#13]
+    conditions: 流水线顺序：sample(N-1) 入队早于 forward(N)，CPU 在 forward(N) 入队后才同步 sample(N-1)
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-06
+    claim: >-
+      在 ZOS 下，CPU 根本不为存量命中请求构造输入 token，而是由 GPU 上的 TileLang 内核 gather_input_ids_zos 直接从上一轮的 prev_sampled_token_ids 与预测 token 中就地捡出。
+    screen: GPU就地捡词·CPU不填存量
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/zos.cpp:84-113"
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/gather_input_ids_zos.py:32-47"
+    quote: >-
+      out_input_ids[q_base + j] = prev_sampled_token_ids[pidx] if j == 0 else prev_predict_token_ids[pidx, j - 1]
+    commit: 9bd9cf2
+    kb: [R05#2, R05#15, R05#16]
+    conditions: remap >= 0 的存量请求 CPU 写入 0 字节，全部由 GPU 算子原地索引读取
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-07
+    claim: >-
+      decode 步的 batch 行序每步都按 get_len() 降序重排，因此 CPU 必须通过 seq_id 建立 remap 映射数组传给 GPU，避免上一轮采样结果与本轮行号错位。
+    screen: remap映射：按序列ID重对齐行序
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:648-652"
+      - "csrc/engine/zos.cpp:147-176"
+    quote: >-
+      std::sort(scheduled.begin(), scheduled.end(), [](const SequencePtr &a, const SequencePtr &b) { return a->get_len() > b->get_len(); });
+    commit: 9bd9cf2
+    kb: [R05#9, R05#14]
+    conditions: 仅当序列顺序完全一致时走同序快路径，否则构建哈希表匹配
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-08
+    claim: >-
+      输出 EOS 结束符的请求在第 N 步结束时 CPU 并不知晓，因此会在第 N+1 步被多排一次多余的 forward，其输入 token 为 EOS 本身，输出在第 N+1 步后处理中被直接丢弃，并在第 N+2 步释放。
+    screen: EOS多跑一步：输出丢弃·下下步释放
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/zos.cpp:298-299"
+      - "csrc/engine/scheduler.hpp:906-915"
+      - "csrc/engine/scheduler.hpp:752-763"
+    quote: >-
+      if (seq.is_finished()) { ... release_mtp_info_slot ... } // 只回收槽位，不做 token 记账
+    commit: 9bd9cf2
+    calc: calc/EP05_bubble.py
+    kb: [R05#17]
+    conditions: ZOS 滞后一步的固有代价；500 token 生成下多跑 1 步仅浪费 0.2% 算力
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-09
+    claim: >-
+      ZOS 下调度器必须通过 advance_optimistically 乐观推进 token 计数与块预留，并在采样结果出来后通过 commit_processed_tokens 用实际接受长度回填。
+    screen: 乐观推进·事后回填
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/sequence.hpp:216-221"
+      - "csrc/engine/scheduler.hpp:927"
+      - "csrc/engine/scheduler.hpp:999"
+    quote: >-
+      void advance_optimistically(int token_count); void commit_processed_tokens(int token_count);
+    commit: 9bd9cf2
+    kb: [R05#21]
+    conditions: 显存块预留通过 total_inflight_tokens 维持在虚高与真实之间正确保护
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-10
+    claim: >-
+      DSpark 变长验证在 ZOS 下采用分层协作：CPU 依据 CUDA Graph 实测延迟曲线选定最优总预算 best_bsz，GPU 上的 TileLang 内核按置信度重算每请求验证长度并 D2H 写回 pinned buffer 供采样使用。
+    screen: 变长协作：CPU定总预算·GPU分单项
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/mtp_varlen.hpp:235-266"
+      - "deepinfer/worker/worker.py:218-234"
+      - "csrc/engine/zos.cpp:279-305"
+    quote: >-
+      compute_seqlens_q_by_confidence_rates(total_q, remap[:n_seq], prev.sampler_output.confidence_rates_gpu, seqlens_q[:n_seq])
+    commit: 9bd9cf2
+    kb: [R05#19, R05#20, R05#23]
+    conditions: 仅当 DEEPINFER_ENABLE_MTP_VARLEN 为真时触发 D2H 回写；总 token 预算保持恒定
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-11
+    claim: >-
+      在 ZOS 变长投机模式下，由于 GPU 可能将单个请求的验证长度扩展至 max_seqlen_q，BlockManager 在 CPU 调度时必须按最坏情况预留显存块以防止 GPU 越界。
+    screen: 最坏情况防御：按最大q预留显存块
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/zos.cpp:218-225"
+    quote: >-
+      const int64_t max_k = seq->seqlen_k - seq->seqlen_q + max_seqlen_q;
+    commit: 9bd9cf2
+    kb: [R05#29]
+    conditions: block table 预留按最坏情况 q=1+nextn 算，换取 GPU 上自由重分配的零开销
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-12
+    claim: >-
+      DeepInfer 的 decode 调度采用 LCFS（最短输出优先），显存不足时抢占最老的请求（长输出），且默认配置下抢占即直接终止请求（FINISHED_PREEMPTED）而非重算或换出。
+    screen: LCFS调度·抢占老请求直接判死
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:622-643"
+      - "csrc/engine/scheduler.hpp:771-788"
+      - "deepinfer/engine/arg_utils.py:40"
+    quote: >-
+      std::sort(running.begin(), running.end(), [](const SequencePtr &a, const SequencePtr &b) { return a->get_output_len() > b->get_output_len(); });
+    commit: 9bd9cf2
+    kb: [R05#7, R05#8]
+    conditions: 默认 stop_preempted_request=True；关掉后才走从头重算逻辑
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-13
+    claim: >-
+      NORMAL 引擎中同一步不允许混合 prefill 与 decode，全组通过 _dp_allreduce 投票统一步型；默认每 70 个 decode 步发起一次 ALL 投票，每 100 步发起一次 ANY 投票防饿死。
+    screen: DP投票·70步ALL/100步ANY
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:288-295"
+      - "csrc/engine/scheduler.hpp:308-340"
+      - "deepinfer/environ.py:174-177"
+    quote: >-
+      bool is_any_point = (decode_step != 0) && (decode_step % prefill_any_attempt_interval == 0); bool is_all_point = (decode_step % prefill_attempt_interval == 0);
+    commit: 9bd9cf2
+    calc: calc/EP05_bubble.py
+    kb: [R05#2, R05#3, R05#4]
+    conditions: 默认 prefill_attempt_interval=70、prefill_any_attempt_interval=100
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-14
+    claim: >-
+      官方文档中描述的"prefill 二次代价模型与 compute_quota_limit 时间预算"在开源代码中并不存在；开源版的 prefill 分块仅依据剩余 token 硬预算与图片边界裁剪，二次项仅作为 FlopsEstimator 用于日志记账。
+    screen: 二次预算仅在文档·代码仅硬Token
+    grade: A
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:115"
+      - "csrc/engine/scheduler.hpp:467-511"
+      - "csrc/engine/flops_estimator.hpp:22-27"
+    quote: >-
+      Scheduled q/k ignore acceptance/ZOS corrections. MFU measures target-model FLOPs throughput.
+    commit: 9bd9cf2
+    kb: [R05#3, R05#26, R05#Q5]
+    conditions: compute_quota_limit 在全仓代码零命中；FlopsEstimator 仅在 log_stats 时调用，不参与任何调度决策
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-15
+    claim: >-
+      decode_perf_cache.py 实际缓存的是 CUDA Graph 各档位的 forward 延迟毫秒数，而非吞吐量；该延迟曲线由 rank0 离线或启动时实测缓存，结合在线滑动窗口斜率用于 DSpark 变长验证的吞吐估算。
+    screen: 缓存延迟毫秒数·非直接缓存吞吐
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/decode_perf_cache.py:40-52"
+      - "csrc/engine/mtp_varlen.hpp:235-266"
+    quote: >-
+      "time_unit": "ms", # Separate millisecond curves from the old SPS cache.
+    commit: 9bd9cf2
+    kb: [R05#23, R05#25, R05#Q6]
+    conditions: 仅当 use_cuda_graph 为 True 时生效；若未开 CUDA Graph 则退回全长验证
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-16
+    claim: >-
+      DeferredRelease 类将 SequenceMetadata 对象池与 RequestOutput 的回收推迟一轮，在下一次 pre_sampler_sync 时释放，确保对象生命周期与 GPU 计算重叠且不发生踩踏。
+    screen: 延迟释放：与GPU计算并行回收对象
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:67-70"
+      - "deepinfer/engine/llm_engine.py:100-113"
+      - "deepinfer/worker/worker.py:162-165"
+    quote: >-
+      延后一轮释放 step 产出的资源，保证调用方读完。在下一次的 pre_sampler_sync 时释放，与 GPU 计算 overlap。
+    commit: 9bd9cf2
+    kb: [R05#28]
+    conditions: ZOS 下对象回收契约必须滞后一步
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-17
+    claim: >-
+      当所有活跃请求生成完毕时，引擎必须显式调用 flush_inflight_reqs 补做最后一个在途 decode 步的后处理，否则最后一个生成 token 将丢失在流水线中。
+    screen: 引擎收尾：flush排空在途Token
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/entrypoints/llm.py:176-186"
+      - "deepinfer/worker/worker.py:274-283"
+    quote: >-
+      step_outputs = self.llm_engine.step() if unfinished else self.llm_engine.flush_inflight_reqs()
+    commit: 9bd9cf2
+    kb: [R05#27]
+    conditions: 保证离线生成最后一个 token 正常产出
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-18
+    claim: >-
+      官方部署问答文档明确指出，DeepInfer 的异步流水线调度重叠设计参考了现有的开源实现（SGLang 和 NanoFlow），并非 DeepSeek 原创发明。
+    screen: 借鉴SGLang与NanoFlow
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:274"
+    quote: >-
+      Following existing implementations (SGLang, NanoFlow), the pipeline is overlapped by scheduling asynchronously between GPU and CPU...
+    commit: 9bd9cf2
+    kb: [R05#0, R14#3]
+    conditions: 官方英文问答文档公开声明
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-19
+    claim: >-
+      vLLM 中类似的设计为 AsyncScheduler（async scheduling），在 v0.6+ 版本中已根据兼容性默认自动开启，通过为下一步调度预填 -1 占位符 token 实现跨步重叠。
+    screen: vLLM对照：默认开启异步调度
+    grade: A
+    status: verified
+    evidence:
+      - "vllm/config/vllm.py:1665-1699"
+    quote: >-
+      # async_scheduling defaults to True when compatible
+    commit: 9bd9cf2
+    kb: [R13#2]
+    conditions: 知识库 R13 源码核验证据；文档仍保留 experimental 历史滞后表述
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-20
+    claim: >-
+      SGLang 自 v0.4.0（2024年12月）起默认开启 overlap 调度器，采用 schedule_stream、forward_stream 与 FutureMap 机制消除 CPU 调度延迟，其设计灵感同样源自 NanoFlow。
+    screen: SGLang：默认开启重叠调度
+    grade: A
+    status: verified
+    evidence:
+      - "python/sglang/srt/managers/scheduler.py:1141-1148"
+    quote: >-
+      def event_loop_overlap(self): """A scheduler loop that overlaps the CPU processing and GPU computation."""
+    commit: 9bd9cf2
+    kb: [R14#3, R14#5]
+    conditions: 知识库 R14 源码核验证据；PR #2067 设为默认
+    verified_by: fact-checker@2026-10-26
+
+  - id: F05-21
+    claim: >-
+      量化收益与代价对比表明：在 500 token 的平均输出长度下，ZOS 因 EOS 滞后仅浪费 0.2% 的前向算力，却在全部 500 步中消除了 24.6% 的 GPU 调度空泡，带来超过 30% 的解码吞吐提升。
+    screen: 净收益算式：0.2%浪费换30%吞吐
+    grade: E
+    status: verified
+    evidence:
+      - "calc/EP05_bubble.py"
+    calc: calc/EP05_bubble.py
+    conditions: 基于典型前向 4.6 ms 与 CPU 1.5 ms 参数推算，见 calc/EP05_bubble.py
+    verified_by: fact-checker@2026-10-26

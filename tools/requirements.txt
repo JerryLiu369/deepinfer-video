@@ -1,0 +1,7 @@
+# Python >= 3.10 (3.12 tested). System packages: ffmpeg (with libx264), pango/cairo dev
+# headers for manimpango (Debian/Ubuntu: libpango1.0-dev libcairo2-dev pkg-config),
+# fonts: Noto Sans CJK SC + Noto Sans Mono.
+# The qwen TTS backend (recommended) uses only the standard library; credentials go in .env.
+manim>=0.19,<0.23
+pyyaml>=6
+edge-tts>=6.1   # fallback TTS backend (no key)

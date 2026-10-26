@@ -1,0 +1,40 @@
+episode: EP99
+facts:
+  - id: F99-01
+    claim: V4.1-Flash 主干 40 层，每层都有滑动窗口注意力，窗口 128 个 token。
+    screen: 40 层 · 每层 SWA 窗口 128
+    grade: A
+    status: verified
+    evidence:
+      - "HF config.json: num_hidden_layers=40, sliding_window=128"
+      - "deepinfer/hugging_face/config.py:284 window_size=(text['sliding_window'], 0)"
+    commit: 9bd9cf2
+    kb: [R02a#1, R02a#3]
+    conditions: 只指主干 40 层，不含 MTP 草稿层
+    caveat: ""
+  - id: F99-02
+    claim: decoder 层 prefill 只保留末尾 KEEP_TOKENS 个 query 行；代码断言 KEEP_TOKENS ≥ window + MAX_BACKTRACKING_TOKENS（128 + 6）；README 给 V4.1 的设置是 140。
+    screen: 保留 140 ≥ 128 + 6
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/environ.py:128-132 MAX_BACKTRACKING_TOKENS = max(v, USE_NEXTN_DECODE + 1), nextn 默认 5"
+      - "deepinfer/environ.py:191-194 KEEP_TOKENS 定义与约束说明"
+      - "deepinfer/worker/model_runner.py:107-113 assert window + backtracking <= KEEP_TOKENS"
+      - "README: DEEPINFER_YOCO_PREFILL_KEEP_TOKENS=140 (V4.1 default)"
+    commit: 9bd9cf2
+    kb: [R07#1, R07#2]
+    conditions: 代码默认 TRUNCATION_MODE=off、KEEP_TOKENS=0；按 README 设 compact + 140 才真正少算
+    caveat: 6 = nextn + 1，nextn 默认 5；134 是存储/命中口径，140 是保留行数，两者是不等式关系，不是同一个数
+  - id: F99-03
+    claim: ZOS 开启时 Worker.execute_model_step 的顺序是 Forward(N) → post-process(N−1) → Sample(N)，CPU 处理的是上一步的输出。
+    screen: CPU 晚 GPU 一步
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:89-189 execute_model_step"
+      - "deepinfer/engine/llm_engine.py:824-828 注释：ZOS=True 处理上一个 step 输出的 token"
+    commit: 9bd9cf2
+    kb: [R04#3, R05#1]
+    conditions: 只在连续 decode 步之间成立；prefill 步仍同步
+    caveat: ""

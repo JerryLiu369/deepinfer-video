@@ -1,0 +1,13 @@
+# Facts shared across episodes use the G- prefix.
+episode: GLOBAL
+facts:
+  - id: G-01
+    claim: 本系列所有代码引用基于 deepseek-ai/DeepInfer @ 9bd9cf243fc53ef9afbf8f04d391d989117d6ab9（2026-10-21）。
+    screen: 代码版本 9bd9cf2
+    grade: A
+    status: verified
+    evidence: ["versions.md:9 (knowledge base)", "git -C sources/DeepInfer log -1"]
+    commit: 9bd9cf2
+    kb: [versions]
+    conditions: ""
+    caveat: 若 P0 复核发现仓库有新提交，以 decisions.md 记录的新基线为准

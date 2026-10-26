@@ -1,0 +1,42 @@
+# Sensitive Environment and Secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.keystore
+*.jks
+
+# Intermediate build and rendering directories
+work/build/
+
+# Large release video binaries (hosted via GitHub Releases / Bilibili, keep repo lightweight)
+work/release/*.mp4
+work/release/*.zip
+
+# Python & Environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.ruff_cache/
+
+# Agent execution runtime artifacts (keep git repo clean)
+.opencode/
+opencode.json
+.codex/
+tsv.txt
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+*.tmp

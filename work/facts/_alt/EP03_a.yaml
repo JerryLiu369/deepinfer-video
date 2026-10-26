@@ -1,0 +1,534 @@
+# EP03 事实账本（独立建账 a 版）
+# 代码基线：deepseek-ai/DeepInfer @ 9bd9cf243fc53ef9afbf8f04d391d989117d6ab9（2026-10-21）
+# 模型基线：HF deepseek-ai/DeepSeek-V4.1-Flash-1017 的 config.json 与权重索引（2026-10-26 读取）
+# 官方技术报告：DeepSeek_V41_Tech_Report.pdf（HF DeepSeek-V4.1-Flash 仓库，2026-10-26 读取）
+episode: EP03
+facts:
+  - id: F03-01
+    claim: >-
+      V4.1-Flash 主干 40 层，另有 3 个 DFlash 草稿层；HF 配置用 43 项的 compress_ratios
+      逐层描述结构，长度必须等于 num_hidden_layers + num_nextn_predict_layers。
+    screen: 40 层 + 3 草稿层
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/hugging_face/config.py:146-155"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json (num_hidden_layers=40, num_nextn_predict_layers=3, compress_ratios 共 43 项)"
+    quote: 'assert len(ratios) == n_layer + nextn, f"compress_ratios length {len(ratios)} != n_layer({n_layer}) + nextn({nextn})"'
+    commit: 9bd9cf2
+    kb: [R02a#2, R02b#3]
+    conditions: 只指主干层数；43 项 = 40 个主干 + 3 个草稿层
+    caveat: 草稿层也叫 nextn / MTP / DFlash，同一组权重的三个名字（R02c #4）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-02
+    claim: >-
+      每层注意力类型只由 compress_ratios 的一个整数决定：0 走 _win_spec（sparse_stage=0，
+      只有 128 窗口 SWA）；非 0 走 _compress_spec（n_packed_heads=64、kv_compress_ratio=该整数、
+      index_topk=512，并带 indexer 配置）。
+    screen: ratio 0/2/1 三种层
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/hugging_face/config.py:146-155"
+      - "deepinfer/hugging_face/config.py:99-108"
+      - "deepinfer/hugging_face/config.py:111-133"
+    quote: 'specs: list[Any] = [_win_spec(text) if ratio == 0 else _compress_spec(text, ratio, shared) for ratio in ratios[:n_layer]]'
+    commit: 9bd9cf2
+    kb: [R02a#1, R02b#1]
+    conditions: V4.1-Flash 的 compress_ratios = 2 个 0 + 18 个 2 + 20 个 1 + 3 个 0
+    caveat: ratio 1 在官方报告里叫“不压缩主 KV 的特例”，不是“没有块状 KV”；ratio 2 才是 2:1 压缩
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-03
+    claim: >-
+      encoder 与 decoder 的分界不是引擎开关，而是从权重里推出来的：n_prefill_layer 取第一个
+      ratio==1 的下标，V4.1 得 20，所以 layer 0–19 是 encoder 侧、20–39 是 YOCO consumer。
+    screen: 前 20 层 / 后 20 层
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/hugging_face/config.py:158-161"
+      - "deepinfer/model_executor/models/v4_modules/yoco.py:19-21"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json (compress_ratios: 下标 20 为第一个 1)"
+    quote: 'return next(i for i, ratio in enumerate(ratios) if ratio == 1)'
+    commit: 9bd9cf2
+    kb: [R02b#2, R02b#3]
+    conditions: V4.1-Flash；若某模型没有 ratio==1 的层，这行会抛 StopIteration
+    caveat: >-
+      “encoder/decoder 层”是官方文档与技术报告术语，代码里叫 n_prefill_layer 之前/之后与
+      yoco consumer；CED 是报告里的架构名，代码里不出现这个标识符
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-04
+    claim: >-
+      官方技术报告称 CED 把模型底部一半层当因果 encoder，decoder 的全局 KV 不来自本层 hidden，
+      而是从第 L/2 层的 hidden 用与层相关的投影权重投影出来；40 层被平分为两个 20 层。
+    screen: 官方：KV 来自第 20 层
+    grade: B
+    status: verified_with_caveat
+    evidence:
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.7 Figure 3 caption, p.8 §2.2)"
+    quote: 'the KV entries are not derived from their respective hidden states H_l. Instead, they are projected directly from the hidden state of the (L/2)-th layer, H_{L/2}, using layer-dependent projection weights'
+    kb: [R02b#5]
+    conditions: 官方报告对 CED 的结构描述，不是代码断言
+    caveat: >-
+      “layer-dependent projection weights”与开源权重不一致：权重里只有第 20 层有 compressor，
+      其余 19 层没有（见 F03-05）。报告描述的是设计，开源实现是单份投影
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-05
+    claim: >-
+      开源实现里只有 4 层（2、8、14、20）持有 KV compressor 并真的写块状 KV，其余 36 层都没有
+      compressor 权重；21–39 层的 ca_cache 全部按 layer_kv_map 别名到第 20 层，因此后 20 层
+      共用一份投影、一份块状 KV。
+    screen: 只有 4 层产块状 KV
+    grade: A
+    status: verified_with_caveat
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mla_attn.py:252-269"
+      - "deepinfer/worker/cache_engine.py:446-461"
+      - "deepinfer/hugging_face/config.py:62-65"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/model.safetensors.index.json (attn.compressor.* 只出现在层 2/8/14/20)"
+    quote: 'Only the kv-source layers really hold PackedWkv; the other layers are None (the forward takes it from the source layer)'
+    commit: 9bd9cf2
+    kb: [R02b#8, R02a#24]
+    conditions: V4.1-Flash 权重索引 + 代码；没有人运行过，这里只描述代码路径
+    caveat: >-
+      官方报告说 decoder 各层有“layer-dependent”的 KV 投影，但开源权重只有一份（第 20 层），
+      代码也只支持别名到源层。讲“后 20 层复用第 20 层投出的 KV”时以代码和权重为准
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-06
+    claim: >-
+      40 层里只有 8 层有 indexer 模块（2、8、14、20、24、28、32、36）；按官方报告的分组，
+      4 层是 Full 模式（自己选 top-512）、4 层是 Reindex 模式（复用主 KV、自己重选）、
+      其余 32 层是 Reuse 模式（直接复用最近一次 top-k，不跑 indexer）。
+    screen: 8 层选 top-k · 32 层复用
+    grade: A
+    status: verified_with_caveat
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/attn.py:292"
+      - "deepinfer/hugging_face/config.py:68-75"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/model.safetensors.index.json (attn.indexer.* 只在 2/8/14/20/24/28/32/36)"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.21 §4.2.1)"
+    quote: 'self.has_local_index = self.is_sparse and self.is_index_source'
+    commit: 9bd9cf2
+    kb: [R02a#24, R02b#13]
+    conditions: 分组数据来自报告 §4.2.1：encoder 3 组×6 层、decoder 5 组×4 层
+    caveat: >-
+      代码只声明“有本地 indexer/复用别层”，Full/Reindex/Reuse 三个名字来自报告；
+      另外 24/28/32/36 复用第 20 层的 index-K（layer_index_k_map 缺省跟随 kv_source_layer_ids）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-07
+    claim: >-
+      40 个主干层全部有 SWA（窗口 128），没有任何“全量注意力”层；layer 0–1 是纯 SWA，
+      2–19 是 SWA + C2 2:1 压缩，20–39 是 SWA + C1 1:1 共享。C2 不是取平均，而是对相邻
+      两个 token 的 512 维 latent 按逐通道 softmax 权重加权求和；C1 是恒等。
+    screen: 每层都有 128 窗口 SWA
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/compress.py:199"
+      - "deepinfer/model_executor/models/v4_modules/compress.py:75-96"
+      - "deepinfer/hugging_face/config.py:104"
+      - "deepinfer/model_executor/models/v4_modules/attn.py:242-243"
+      - "deepinfer/worker/cache_engine.py:682-699"
+    quote: 'result = (latent_slice * score_slice.softmax(dim=0)).sum(dim=0).to(torch.bfloat16)'
+    commit: 9bd9cf2
+    kb: [R02a#14, R02a#19]
+    conditions: V4.1-Flash；_is_full 要求 ratio==0 且 sink_mode!=swa，V4.1 永远不满足
+    caveat: >-
+      softmax 沿 token 维（dim=0）做，每个通道有各自的混合比例；不要讲成“注意力权重”。
+      2–19 的 18 层都是 C2 规格，但只有 2/8/14 三层真的写 KV，其余 15 层复用（见 F03-05）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-08
+    claim: >-
+      V4.1 的“MLA”是 64 个 query 头对一条 512 维共享 latent 的 MQA：num_key_value_heads=1
+      被代码硬断言，HF 的 head_dim=512 内含 64 维 RoPE，内部 kv_lora_rank 因此是 448；
+      Q 先降到 1280 维再升到 64×512，输出按 8 组各 1024 维再投影回 5120。
+    screen: 64 头 · 1 条 512 维 KV
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mla_attn.py:175-181"
+      - "deepinfer/hugging_face/config.py:287-293"
+      - "deepinfer/model_executor/models/v4_modules/mla_attn.py:221-229"
+    quote: 'assert self.num_lora_rope_head == 1'
+    commit: 9bd9cf2
+    kb: [R02a#3, R02a#5, R02a#6]
+    conditions: HF config：num_attention_heads=64、num_key_value_heads=1、head_dim=512、qk_rope_head_dim=64
+    caveat: 512 维 latent 同时承担 nope 与 rope（RoPE 打在末尾 64 维），不是“512+64”
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-09
+    claim: >-
+      块状 KV 摊到每个输入 token 是 890 B：每个压缩 token 存 288 B 主 KV（FP4 + per-16 scale）
+      与 68 B index-K（FP4 + per-32 scale）；3 个 2:1 源层各摊 (288+68)/2，第 20 层不压缩摊 356，
+      合计 3×178 + 356 = 890。该值与官方报告摘要的 890 bytes/token 精确吻合。
+    screen: 890 B / token
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:433-461"
+      - "deepinfer/model_executor/layers/tilelang_ops/cache_common.py:109-137"
+      - "calc/EP03_kv_bytes.py"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.1 Abstract, p.7 §2.1)"
+    quote: 'token_per_block = block_size // ratio'
+    commit: 9bd9cf2
+    calc: calc/EP03_kv_bytes.py
+    kb: [R02a#22, R02a#13, R02a#16]
+    conditions: >-
+      只含块状 KV（主 KV + index-K），不含 40 层的 SWA KV 与压缩状态；V4.1 默认
+      use_fp4_sparse_kv=True，主 KV 走 288 B 而不是 528 B
+    caveat: >-
+      890 是精确值不是约数；若把 24/28/32/36 也算成独立 index-K 副本会得到 1,162 B/token，
+      与官方数字不符——反过来说 890 验证了“index-K 只有 4 份”
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-10
+    claim: >-
+      块状 KV 按 128 个“压缩前 token”为一个 block 分配，一个 block 是 113,920 B：
+      层 2/8/14 各 64×(288+68)=22,784，层 20 是 128×356=45,568。block 大小 128 与落盘粒度
+      128、128 字节对齐是三个不同的“128”。
+    screen: 每 block 113,920 B
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/model_metadata_utils.py:133-140"
+      - "deepinfer/worker/cache_engine.py:433-461"
+      - "deepinfer/worker/cache_engine.py:32-33"
+      - "calc/EP03_kv_bytes.py"
+    quote: 'return 128'
+    commit: 9bd9cf2
+    calc: calc/EP03_kv_bytes.py
+    kb: [R06#1, R06#2, R02a#23]
+    conditions: block_size=128 个压缩前 token；C2 层一个 block 只装 64 个 KV token
+    caveat: >-
+      三个 128 要分开说：block 大小 128 token、KVSTORE_GRAIN 落盘粒度 128 token、
+      MXFP8/FP4 cache 的 128 字节 block 对齐；三者含义不同
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-11
+    claim: >-
+      每序列的 SWA 状态槽固定 2,916,672 B（约 2.78 MiB），与上下文长度无关：40 层 ×
+      134 个环位置 × 528 B = 2,830,080 B，加 3 个 C2 层的压缩环 3×7×2×512×4 = 86,016 B，
+      再按 lcm(32,528)=1056 对齐。其中需要落盘的只有前 20 层，共 1,415,040 B。
+    screen: 状态 2.78 MiB / 序列
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:88-93"
+      - "deepinfer/worker/cache_engine.py:261-306"
+      - "deepinfer/environ.py:129-133"
+      - "doc/inference_deployment_qa.md:163"
+      - "doc/inference_deployment_qa.md:169"
+      - "calc/EP03_state_crossover.py"
+    quote: 'return (window_size + envs.DEEPINFER_MAX_BACKTRACKING_TOKENS) if window_size > 0 else 0'
+    commit: 9bd9cf2
+    calc: calc/EP03_state_crossover.py
+    kb: [R02a#26, R06#21, R07#9]
+    conditions: 默认 USE_NEXTN_DECODE=5 → 回退 6；PREFILL_STORE_EXTRA_STATE 默认关闭（环=134）
+    caveat: >-
+      134 = 128 窗口 + 6 个回退位，与 README 的 KEEP_TOKENS=140 是两个对象；
+      文档说 dropped 区含 ica_state，但 V4.1 的 indexer 走 use_kproj，代码不分配 ica_state，
+      所以 86,016 B 只算 ca_state
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-12
+    claim: >-
+      以每序列占用比：块状 KV 是 890 B/token 的 O(L)，SWA 状态是 2,916,672 B 的 O(1)；
+      两条线在 3,277 token 处相交；若按 128-token block 的实际分配粒度，交叉点是 26 个 block
+      即 3,328 token。1M 上下文时块状 KV 是状态的约 320 倍。
+    screen: 交叉点 ≈ 3,277 token
+    grade: E
+    status: verified_with_caveat
+    evidence:
+      - "calc/EP03_state_crossover.py"
+    calc: calc/EP03_state_crossover.py
+    conditions: >-
+      示意比较：块状 KV 只算主 KV + index-K（890 B/token），状态槽含 40 层 SWA 环与 C2 压缩状态；
+      两边都不是同一种资源，只在“每序列内存”这个口径上可比
+    caveat: >-
+      这个交叉点只说明“短上下文时状态开销相对更贵”，不代表总占用；实际分配按 block 与 state slot
+      两种粒度，曲线是阶梯不是直线
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-13
+    claim: >-
+      Engram 是两张超大稀疏 n-gram 查表（第 1、14 层各一张）。每层 3 张表（2/3/4-gram）× 8 个头，
+      每个头从 1600 万起的互异素数取桶数，所以每层 384,006,168 / 384,016,682 行、行宽 256 维；
+      两层合计 196.61 B 参数，FP8 存储约 196.6 GB。每个 token 每层最多查 3×8=24 行，约 6K 个值。
+    screen: Engram 196B 参数查表
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/engram_metadata.py:67-95"
+      - "deepinfer/model_executor/models/v4_modules/engram_parameters.py:21-34"
+      - "deepinfer/hugging_face/config.py:200-206"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/model-00047-of-00048.safetensors (layers.1.engram.embed.weight [384006168, 256], F8_E4M3)"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.13 §2.4.2)"
+      - "calc/EP03_params.py"
+    quote: 'sizes.append(prime)'
+    commit: 9bd9cf2
+    calc: calc/EP03_params.py
+    kb: [R02b#20, R02c#1]
+    conditions: >-
+      HF config：engram_layer_ids=[1,14]、engram_vocab_size=16,000,000、engram_n_heads=8、
+      engram_head_dim=256、engram_max_ngram_size=4；行数由配置复算得到，与 config 的
+      engram_num_embeddings 两个值逐位吻合
+    caveat: >-
+      196.93B 是“查表 + 融合投影”的口径；单算表是 196.61B，投影权重另占 0.31B。
+      每 token 只命中 24 行，命中率约 6e-8，不能按稠密矩阵乘理解。官方报告说推理时表可由主机内存
+      按需预取（RDMA），代码另有 DEEPINFER_ENGRAM_FORCE_GPU_STORAGE 开关，表不一定常驻显存
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-14
+    claim: >-
+      Engram 不是单独一层，而是插在残差主干上的钩子：在本层 HC post 之后、pre 之前原地改写
+      4 路主干；只要该层有 Engram，这层的 mega_mhc 融合就失效，退化成 post / pre 两次调用。
+    screen: Engram 原地改残差主干
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/hc.py:184-186"
+      - "deepinfer/model_executor/models/decoder_layer.py:111-118"
+      - "deepinfer/model_executor/models/v4_modules/engram.py:149-160"
+    quote: 'When hc_post_intervention is not None (e.g. the engram layer) an intervention is applied to the trunk after post and before pre, in which case the mega_mhc fusion is not used'
+    commit: 9bd9cf2
+    kb: [R02b#19, R02b#21]
+    conditions: V4.1 的 Engram 层是 1 和 14，都在 encoder 半区
+    caveat: compact 模式断言 Engram 不能在 consumer 层（deepseek.py:136-138），所以“Engram 在 encoder”是硬约束
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-15
+    claim: >-
+      “3 层 MTP”与“每步猜 5 个”是两个独立超参：num_nextn_predict_layers=3 是堆叠的草稿层数
+      （代码断言 DFlash 模块层数等于它），dspark_block_size=5 是每步一次前向覆盖的草稿位置数；
+      引擎侧草稿宽度由环境变量 DEEPINFER_USE_NEXTN_DECODE 决定，默认 5，且直接覆盖 block size。
+    screen: 3 层草稿 · 每步 5 个
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:103-110"
+      - "deepinfer/model_executor/models/mtp/dflash.py:141"
+      - "deepinfer/environ.py:129-132"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json (num_nextn_predict_layers=3, dspark_block_size=5)"
+    quote: 'assert self.MTP_num_layers == nextn_predict, f"DFlash 模块应该有 nextn_predict={nextn_predict} 层，实际有 {self.MTP_num_layers}"'
+    commit: 9bd9cf2
+    kb: [R02c#2, R02c#5, R02c#4]
+    conditions: 默认 DEEPINFER_USE_NEXTN_DECODE=5；权重按 block=5 训练
+    caveat: >-
+      代码用 env 覆盖 dflash_block_size 且没有断言等于 dspark_block_size；改成非 5 不会改权重，
+      但会改变草稿语义（R02c #2 疑点）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-16
+    claim: >-
+      5 个草稿 token 由 3 层草稿层的一次前向给出 5 组 logits，再沿 5 步用 rank-256 的 Markov 头
+      逐步修正并采样；官方报告的说法是“一次前向并行算出 5 个位置的基础 logits，轻量 Markov 头
+      建模草稿之间的依赖”。
+    screen: 一次前向 · 5 个位置
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/mtp/dflash.py:308-336"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.13 §2.4.3)"
+    quote: 'logits = logits_next[step_i :: self.max_MTP_value]'
+    commit: 9bd9cf2
+    kb: [R02c#10]
+    conditions: max_MTP_value 来自 DEEPINFER_USE_NEXTN_DECODE，默认 5
+    caveat: Markov 头只保证 256 维的低秩依赖，不是 5 次完整前向
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-17
+    claim: >-
+      草稿块的 5 个位置共享同一段 KV 索引：每个 query 看到的是“最近 128 个 token + 整个 5 个
+      草稿位置”，因此块内是非因果的（位置 i 能看到位置 j>i 的草稿 token）。
+    screen: 草稿块内非因果
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/get_kv_index.py:183-197"
+    quote: 'kv_index = kv_index_per_req.unsqueeze(1).expand(-1, dflash_block_size, -1).reshape(-1, padded_kv_len).to(torch.int32)'
+    commit: 9bd9cf2
+    kb: [R02c#6]
+    conditions: 引擎侧索引构造；没有人跑过这条路径
+    caveat: 块内非因果靠训练时的 Markov 头与 noise token 布局补偿，不能理解成“5 个 token 并行且互相独立”
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-18
+    claim: >-
+      模型自带置信度头：对每个草稿位置输出一个接受概率，调度器把各位置概率累乘后按全局 top-k
+      分配下一步的验证长度；它不是“低于阈值就丢草稿”的开关。
+    screen: 置信度头分配验证预算
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/schedule_mtp_varlen.py:11-33"
+      - "deepinfer/model_executor/models/mtp/dflash.py:46-79"
+    quote: 'Distribute total_q tokens across sequences based on MTP confidence rates.'
+    commit: 9bd9cf2
+    kb: [R02c#11, R02c#13]
+    conditions: 置信度头的温度默认 1.0；细节留给 EP09
+    caveat: 置信度只影响“验证几个”，不改变采样正确性；拒绝采样仍是最终判定（R02c #14）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-19
+    claim: >-
+      V4.1 的 KV 精度分三档：主 KV 是 FP4 E2M1 + 每 16 通道一个 E4M3 scale（288 B/压缩 token，
+      官方称沿用 NVFP4 但去掉第二级全局 scale）；indexer K 是 FP4 E2M1 + 每 32 通道一个 UE8M0
+      scale（即 MXFP4，68 B）；SWA KV 保持 MXFP8（528 B），官方明确说因为 SWA 对量化更敏感；
+      专家权重是 FP4（I8 打包，config 的 expert_dtype=fp4），Engram 表是 FP8。
+    screen: FP4 主KV · FP8 SWA
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/model_metadata_utils.py:37-39"
+      - "deepinfer/model_executor/layers/tilelang_ops/cache_common.py:109-137"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.14 §2.4.4)"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json (quantization_config: quant_method=fp8, expert_dtype=fp4)"
+    quote: 'FP4 主压缩 KV 每 16 个值共用 scale；MXFP8 主 KV 和 SWA 每 32 个值共用 scale。'
+    commit: 9bd9cf2
+    kb: [R02a#13, R02a#16, R02a#17]
+    conditions: use_fp4_sparse_kv 默认为 True；SWA 永远是 FP8
+    caveat: >-
+      主 KV 的 per-16 指 scale 粒度，数据本身是 E2M1；不是“per-16 FP8”。专家权重是 FP4（I8 打包）、
+      Engram 表是 FP8、激活是 FP8，三者与 KV 精度不是一回事
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-20
+    claim: >-
+      官方技术报告给出参数口径：主干 552B + Engram 196B，decode 每 token 激活 16B、
+      prefill 每 token 激活 8B；Table 1 同口径写 8B/16B 与 552B。
+    screen: 552B 主干 · 16B/8B 激活
+    grade: B
+    status: verified
+    evidence:
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.1 Abstract, p.7 §2.1, p.21 §4.2.1, p.23 Table 1)"
+    quote: 'DeepSeek-V4.1-Flash has 552B backbone parameters and 196B Engram parameters, activating 8B parameters per token during prefill and 16B during decode'
+    kb: [R02c#1, R02c#2]
+    conditions: >-
+      官方报告对应 V4.1-Flash；-1017 是其后的小版本更新，模型卡指向同一份报告。
+      552B 不含 196B Engram 表，也不含 3 层草稿与视觉塔
+    caveat: >-
+      “552B 是媒体数字”这一旧说法不成立：它是官方报告原话。与 HF 权重元数据的 763.2B 不矛盾，
+      两者口径不同（763.2B = 552B 主干 + 196B 查表 + MTP + 视觉）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-21
+    claim: >-
+      HF 权重元数据的安全张量总计 763,205,315,794 个参数（FP4 专家按逻辑参数计）；按 config
+      分项求和：主干 551.5B + Engram 196.9B（表 196.6B + 投影 0.3B）+ MTP 14.4B + 视觉 0.41B
+      + 投影层 0.07B ≈ 763.3B，与元数据相差 0.01%。
+    screen: 总参数 763.2B
+    grade: B
+    status: verified_with_caveat
+    evidence:
+      - "https://huggingface.co/api/models/deepseek-ai/DeepSeek-V4.1-Flash-1017 (safetensors.total=763205315794)"
+      - "calc/EP03_params.py"
+    calc: calc/EP03_params.py
+    kb: [R02c#1]
+    conditions: >-
+      HF API 的 dtype 明细把 FP4 打包权重按逻辑参数计（I8 元素 ×2）；路由专家 543.6B、
+      Engram 表 196.6B 是两项最大的
+    caveat: >-
+      763.2B 是“权重里的参数总数”，不是“每 token 都要过矩阵乘的参数”；其中 196.6B 是查表，
+      每 token 只命中 24 行。R02c 的 196.93B 是含投影的口径
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-22
+    claim: >-
+      按 config 尺寸算，decode 每 token 激活 16.42B：40 层 × 377.3M（注意力 126.6M + gate 2.0M
+      + 共享专家 35.4M + 6×路由专家 212.3M + mHC 1.0M）再加词嵌入与输出头各 0.66B；占总量 2.15%。
+    screen: decode 激活 16.4B
+    grade: E
+    status: verified_with_caveat
+    evidence:
+      - "calc/EP03_params.py"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json (num_experts_per_tok=6, moe_intermediate_size=2304, hidden_size=5120)"
+    calc: calc/EP03_params.py
+    kb: [R02c#2]
+    conditions: 推理过程即脚本；尺寸来自 config，权重形状来自权重索引
+    caveat: >-
+      不计 Engram 查表命中量（每 token 最多 24 行 × 256 维）与 mHC 的 fp32 中间量；
+      与官方 16B 的差异来自四舍五入与词表口径
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-23
+    claim: >-
+      prefill 每 token 激活约 8.2B，约为 decode 的一半：CED 下 prompt token 只走前 20 层
+      （20 × 377.3M + 词嵌入 0.66B = 8.21B），后 20 层只处理末尾 KEEP 个位置，摊到长输入上可忽略。
+    screen: prefill 只激活 8B
+    grade: E
+    status: verified_with_caveat
+    evidence:
+      - "calc/EP03_params.py"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.7 §2.1)"
+    calc: calc/EP03_params.py
+    conditions: 这是 L >> nwin 的摊薄极限；短 prompt（与 128 同量级）时后 20 层的占比不可忽略
+    caveat: >-
+      官方只给 8B 这个数字，没有给推导；这里是把“只算前 20 层”当作解释，属 E 级推断。
+      另外 prefill 的 8B 是“参数激活量”，不等于算力减半（算力口径见 EP07）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-24
+    claim: >-
+      40 层全部是 MoE，没有 dense 前缀：每层 384 个路由专家 + 1 个共享专家，专家中间维 2304，
+      每 token 激活 6 个路由专家；词表 129,280，上下文上限 1,048,576。
+    screen: 384 专家 · 每 token 6 个
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:160-170"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json (n_routed_experts=384, n_shared_experts=1, num_experts_per_tok=6, moe_intermediate_size=2304, vocab_size=129280, max_position_embeddings=1048576, 无 first_k_dense_replace)"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/model.safetensors.index.json (40 层 × 384 个 ffn.experts.*)"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf (p.21 §4.2.1)"
+    quote: 'self.num_topk = cfg.moe.num_experts_per_tok'
+    commit: 9bd9cf2
+    kb: [R02c#3, R02c#20]
+    conditions: 报告的配置节与 HF 权重索引一致
+    caveat: V3 的“前 3 层 dense”在 V4.1 不成立；40 层全部有 384 专家
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-25
+    claim: >-
+      mHC 把残差主干从 1 路扩成 4 路（hc_mult=4），每个子层的混合系数由一个 24×20480 的 fp32
+      矩阵现算，并用 20 次 sinkhorn 归一化；单层两个子层的这份参数约 0.98M。
+    screen: 4 路残差 · 24×20480
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/hc_blocks.py:18-41"
+      - "deepinfer/hugging_face/config.py:294-298"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/model-00003-of-00048.safetensors (layers.0.hc_attn_fn [24, 20480] F32)"
+    quote: 'channels = (2 + m) * m'
+    commit: 9bd9cf2
+    kb: [R02b#15, R02b#16]
+    conditions: HF config：hc_mult=4、hc_sinkhorn_iters=20、hc_norm_group_size=20480
+    caveat: mHC 的算术开销很小，贵的是 fp32 中间量与每 token 的 4×4 混合矩阵；不要讲成“又一个注意力”
+    verified_by: fact-checker@2026-10-26
+
+  - id: F03-26
+    claim: >-
+      “模型特点 → 引擎设计”对照（本系列索引）：40 层全 SWA（窗口 128）→ 每序列固定 134 位置的
+      状态槽（128 窗口 + 6 回退位）；
+      只有 4 层产块状 KV → 块状 KV 按 4 段分配、890 B/token；前 20/后 20 的 CED → compact
+      prefill 只跑后 20 层末尾 KEEP 行、decoder SWA 靠重放；8 个 indexer / 32 层复用 →
+      跨层单槽位共享；196B Engram → 分片查表 + 专用 gather 算子；3 层草稿 × 5 位置 →
+      6 个回退位与投机验证路径；FP4 KV → 专用 FP4 反量化/注意力路径。
+    screen: 模型特点 → 引擎设计
+    grade: E
+    status: verified_with_caveat
+    evidence:
+      - "calc/EP03_state_crossover.py"
+      - "doc/inference_deployment_qa.md:159-191"
+    calc: calc/EP03_state_crossover.py
+    kb: [R02a, R02b, R02c, R06, R07]
+    conditions: 编辑性汇总，不是单一来源；每一行都能回指本账本的具体条目
+    caveat: >-
+      对照表是讲解用的索引，不是因果关系证明：它说的是“引擎必须处理的形状”，不是“DeepSeek 因此
+      才这样设计”。跨层复用的实现动机在报告 §2.3.1，重放与截断的动机在 §3.2.2
+    verified_by: fact-checker@2026-10-26

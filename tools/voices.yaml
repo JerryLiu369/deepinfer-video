@@ -1,0 +1,27 @@
+# Voice casting and tone presets for tools/tts.py. Rules: docs/03_NARRATION_STYLE.md section 12.
+# Changing a voice or a tone text invalidates the audio cache for every line that uses it,
+# so after H2 these are locked; record any change in work/decisions.md first.
+
+backend: qwen            # recommended; "edge" is the offline-free / no-key fallback
+
+qwen:                    # Alibaba Cloud Bailian Qwen-Audio-3.1-TTS-Plus (credentials in .env)
+  cps: 4.9               # speaking rate used by parse_script estimates; 4.57 on EP99, 4.90 on the EP07 pilot (tools/pacing_report.py)
+  voices:
+    n: longanhuan_v3.1     # narrator
+    q: longanlingxin_v3.1  # questioner (script lines starting with "Q：")
+  # Tone instructions. "n" and "q" are the defaults; a shot selects another narrator tone with
+  # "tone: <name>" in its <!-- shot: ... --> line. Q lines always use "q".
+  tones:
+    n: 沉稳、清晰、富有逻辑的科技讲解口吻
+    q: 好奇、探究、求真的提问口吻
+    hook: 平静地抛出一个反直觉的事实，略带悬念，不夸张
+    card: 简短平稳地报出标题，不拖音
+    cost: 坦诚克制地讲代价，不带褒贬，语速与正文一致
+    caveat: 谨慎平实，像在说明限制条件，不含糊
+    recap: 清楚有力地总结，句间自然停顿，语速与正文一致
+
+edge:                    # Microsoft Edge online TTS (no key; no tone control)
+  cps: 3.8
+  voices:
+    n: zh-CN-YunxiNeural
+    q: zh-CN-XiaoxiaoNeural

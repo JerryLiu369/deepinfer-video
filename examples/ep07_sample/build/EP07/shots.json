@@ -1,0 +1,804 @@
+{
+ "episode": "EP07",
+ "title": "EP07 SWA 有界重放：只重算最后一小段",
+ "target_min": 18.0,
+ "meta": {
+  "target_min": "18"
+ },
+ "shots": [
+  {
+   "id": "EP07-S01",
+   "sid": "S01",
+   "title": "冷开场：后二十层只算一百四十个位置",
+   "line": 6,
+   "target_s": 32.0,
+   "facts": [
+    "F07-01",
+    "F07-05",
+    "F07-10"
+   ],
+   "badge": "E",
+   "scope": "mixed",
+   "scene": "EP07_S01",
+   "type": "anim",
+   "tone": "hook",
+   "visual": "40 层竖排（LayerStack），每层右边一条长长的 token 行。镜头推进时，后 20 层的 token 行从左往右变灰，只剩最右端一小段亮着。",
+   "screen_text": [
+    "输入 10,000 token（示意）",
+    "后 20 层：只算末尾 140 个"
+   ],
+   "notes": "",
+   "narration_written": "一个四十层的模型，读进一万个 token 的输入。按常理，四十层都要把这一万个位置算一遍。可在 DeepInfer 里，后面二十层只算了最后 140 个位置。只算这么一点，答案还对吗？大部分时候是对的。这一集讲它为什么敢这么做，以及\"大部分时候\"是什么意思。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "一个四十层的模型，读进一万个 token 的输入。",
+     "spoken": "一个四十层的模型，读进一万个 token 的输入。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "按常理，四十层都要把这一万个位置算一遍。",
+     "spoken": "按常理，四十层都要把这一万个位置算一遍。",
+     "cues_before": [
+      "rows"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "可在 DeepInfer 里，后面二十层只算了最后 140 个位置。",
+     "spoken": "可在 Deep Infer 里，后面二十层只算了最后 一百四十 个位置。",
+     "cues_before": [
+      "keep"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "q",
+     "written": "只算这么一点，答案还对吗？",
+     "spoken": "只算这么一点，答案还对吗？",
+     "cues_before": [],
+     "pause_before": 0.8
+    },
+    {
+     "speaker": "n",
+     "written": "大部分时候是对的。",
+     "spoken": "大部分时候是对的。",
+     "cues_before": [
+      "answer"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这一集讲它为什么敢这么做，以及\"大部分时候\"是什么意思。",
+     "spoken": "这一集讲它为什么敢这么做，以及\"大部分时候\"是什么意思。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 25.31,
+   "est_cues": {
+    "rows": 4.526,
+    "keep": 8.646,
+    "answer": 17.474
+   }
+  },
+  {
+   "id": "EP07-S02",
+   "sid": "S02",
+   "title": "片头卡",
+   "line": 19,
+   "target_s": 4.0,
+   "facts": [],
+   "badge": "-",
+   "scope": "general",
+   "scene": "EP07_S02",
+   "type": "anim",
+   "tone": "card",
+   "visual": "段落卡：集号、标题；左下小地图高亮 Prefill。",
+   "screen_text": [
+    "第七集 · SWA 有界重放"
+   ],
+   "notes": "",
+   "narration_written": "第七集，SWA 有界重放。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "第七集，SWA 有界重放。",
+     "spoken": "第七集，S W A 有界重放。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 3.17,
+   "est_cues": {}
+  },
+  {
+   "id": "EP07-S03",
+   "sid": "S03",
+   "title": "本集问题：有一种 KV 没存下来",
+   "line": 27,
+   "target_s": 26.0,
+   "facts": [
+    "F07-04"
+   ],
+   "badge": "B",
+   "scope": "mixed",
+   "scene": "EP07_S03",
+   "type": "anim",
+   "tone": "",
+   "visual": "小地图放大，\"第五轮请求\"的图标停在 Prefill 站。右边一个绿色的 KV 存储框，里面是前四轮的块状 KV；旁边一个紫色的空框，标\"SWA 状态：缺\"。",
+   "screen_text": [
+    "块状 KV：有",
+    "SWA 状态：缺"
+   ],
+   "notes": "",
+   "narration_written": "我们的第五轮请求，现在走到了 prefill 这一站。前四轮的内容大多已经算过，块状 KV 就在存储里。但有一种 KV，要么没存下来，要么根本不进缓存，那就是 SWA 的 KV。本集的问题是：缺了它，怎样才能不把整段上下文重算一遍？",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "我们的第五轮请求，现在走到了 prefill 这一站。",
+     "spoken": "我们的第五轮请求，现在走到了 prefill 这一站。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "前四轮的内容大多已经算过，块状 KV 就在存储里。",
+     "spoken": "前四轮的内容大多已经算过，块状 K V 就在存储里。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "但有一种 KV，要么没存下来，要么根本不进缓存，那就是 SWA 的 KV。",
+     "spoken": "但有一种 K V，要么没存下来，要么根本不进缓存，那就是 S W A 的 K V。",
+     "cues_before": [
+      "missing"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "本集的问题是：缺了它，怎样才能不把整段上下文重算一遍？",
+     "spoken": "本集的问题是：缺了它，怎样才能不把整段上下文重算一遍？",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 22.01,
+   "est_cues": {
+    "missing": 9.512
+   }
+  },
+  {
+   "id": "EP07-S04",
+   "sid": "S04",
+   "title": "先回顾：SWA 只看最近 128 个",
+   "line": 39,
+   "target_s": 26.0,
+   "facts": [
+    "F07-01",
+    "F07-03"
+   ],
+   "badge": "B",
+   "scope": "oss",
+   "scene": "EP07_S04",
+   "type": "anim",
+   "tone": "",
+   "visual": "一行 token，紫色窗口框宽度标\"128\"，从左往右滑。窗口里的格子亮，窗口外的格子暗。",
+   "screen_text": [
+    "每层窗口 128"
+   ],
+   "notes": "",
+   "narration_written": "先回顾第三集。V4.1 的四十层，每一层都用滑动窗口注意力，也就是 SWA。每个 token 只看自己和前面，一共 128 个位置。窗口往右滑，能看的范围就跟着走。所以只看一层的话，留住最近这一段的 KV，就够下一个 token 用了。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "先回顾第三集。",
+     "spoken": "先回顾第三集。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "V4.1 的四十层，每一层都用滑动窗口注意力，也就是 SWA。",
+     "spoken": "V4.1 的四十层，每一层都用滑动窗口注意力，也就是 S W A。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "每个 token 只看自己和前面，一共 128 个位置。",
+     "spoken": "每个 token 只看自己和前面，一共 128 个位置。",
+     "cues_before": [
+      "win"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "窗口往右滑，能看的范围就跟着走。",
+     "spoken": "窗口往右滑，能看的范围就跟着走。",
+     "cues_before": [
+      "slide"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "所以只看一层的话，留住最近这一段的 KV，就够下一个 token 用了。",
+     "spoken": "所以只看一层的话，留住最近这一段的 K V，就够下一个 token 用了。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 21.65,
+   "est_cues": {
+    "win": 7.434,
+    "slide": 11.766
+   }
+  },
+  {
+   "id": "EP07-S05",
+   "sid": "S05",
+   "title": "麻烦在于：层是叠起来的",
+   "line": 50,
+   "target_s": 34.0,
+   "facts": [
+    "F07-02"
+   ],
+   "badge": "B",
+   "scope": "doc",
+   "scene": "EP07_S05",
+   "type": "anim",
+   "tone": "",
+   "visual": "三层 token 行上下叠放。最上层一个蓝色位置，向下一层画出它看的 128 宽范围；再向下一层，这个范围的左边界继续往左扩。扩张的部分用红色描边。",
+   "screen_text": [
+    "2,560 token × 20 层"
+   ],
+   "notes": "",
+   "narration_written": "麻烦在于，层和层是叠起来的。上一层的一个位置，看下一层的 128 个位置；而那 128 个位置，又各自看了再往前的 128 个。层数越多，真正影响结果的历史就越长。DeepSeek 在部署问答里算过这笔账。精确重建后二十层的 SWA KV，得把最后 2,560 个 token 跑过这二十层。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "麻烦在于，层和层是叠起来的。",
+     "spoken": "麻烦在于，层和层是叠起来的。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "上一层的一个位置，看下一层的 128 个位置；",
+     "spoken": "上一层的一个位置，看下一层的 128 个位置；",
+     "cues_before": [
+      "stack"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "而那 128 个位置，又各自看了再往前的 128 个。",
+     "spoken": "而那 128 个位置，又各自看了再往前的 128 个。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "层数越多，真正影响结果的历史就越长。",
+     "spoken": "层数越多，真正影响结果的历史就越长。",
+     "cues_before": [
+      "grow"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "DeepSeek 在部署问答里算过这笔账。",
+     "spoken": "DeepSeek 在部署问答里算过这笔账。",
+     "cues_before": [
+      "doc"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "精确重建后二十层的 SWA KV，得把最后 2,560 个 token 跑过这二十层。",
+     "spoken": "精确重建后二十层的 S W A K V，得把最后 两千五百六十 个 token 跑过这二十层。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 27.09,
+   "est_cues": {
+    "stack": 3.137,
+    "grow": 12.066,
+    "doc": 15.741
+   }
+  },
+  {
+   "id": "EP07-S06",
+   "sid": "S06",
+   "title": "有界重放：只重算一小段，也只许看这一段",
+   "line": 62,
+   "target_s": 32.0,
+   "facts": [
+    "F07-03"
+   ],
+   "badge": "B",
+   "scope": "mixed",
+   "scene": "EP07_S06",
+   "type": "anim",
+   "tone": "",
+   "visual": "注意力矩阵（AttentionMatrix，示意），紫色带状可见域。在第 s 列画一条竖线，竖线左边的可见格变灰。右侧公式卡滑入。",
+   "screen_text": [
+    "max(s, i−127) … i"
+   ],
+   "notes": "",
+   "narration_written": "有界重放的做法很直接：只重算最后一小段，而且重算时，谁也不许看这一段之外。假设从位置 s 开始重放。位置 i 能看的左边界，取 s 和 i 减 127 里较大的那个。这样得到的 SWA KV 是近似的。换来的是：重算的代价变成了常数，和上下文多长、模型多少层都没有关系。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "有界重放的做法很直接：只重算最后一小段，而且重算时，谁也不许看这一段之外。",
+     "spoken": "有界重放的做法很直接：只重算最后一小段，而且重算时，谁也不许看这一段之外。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "假设从位置 s 开始重放。",
+     "spoken": "假设从位置 s 开始重放。",
+     "cues_before": [
+      "formula"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "位置 i 能看的左边界，取 s 和 i 减 127 里较大的那个。",
+     "spoken": "位置 i 能看的左边界，取 s 和 i 减 127 里较大的那个。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这样得到的 SWA KV 是近似的。",
+     "spoken": "这样得到的 S W A K V 是近似的。",
+     "cues_before": [
+      "approx"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "换来的是：重算的代价变成了常数，和上下文多长、模型多少层都没有关系。",
+     "spoken": "换来的是：重算的代价变成了常数，和上下文多长、模型多少层都没有关系。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 25.81,
+   "est_cues": {
+    "formula": 7.803,
+    "approx": 15.31
+   }
+  },
+  {
+   "id": "EP07-S07",
+   "sid": "S07",
+   "title": "它用在两个地方",
+   "line": 74,
+   "target_s": 30.0,
+   "facts": [
+    "F07-04"
+   ],
+   "badge": "B",
+   "scope": "mixed",
+   "scene": "EP07_S07",
+   "type": "anim",
+   "tone": "",
+   "visual": "40 层竖排，前 20 层标\"encoder\"，后 20 层标\"decoder\"。先在前 20 层末端点亮一个 128 宽的小段（命中补算），再在后 20 层末端点亮小段（decoder prefill）。",
+   "screen_text": [
+    "① 前 20 层：命中补算",
+    "② 后 20 层：每次 prefill"
+   ],
+   "notes": "",
+   "narration_written": "它用在两个地方。第一处在前二十层。命中了缓存，但最后一段 SWA 没存下来。这时，把命中前缀的最后 128 个 token，和新内容一起重算。第二处在后二十层。每次 prefill，都只算末尾一小段。这一段的结果只给接下来的 decode 用，不进缓存。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "它用在两个地方。",
+     "spoken": "它用在两个地方。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "第一处在前二十层。",
+     "spoken": "第一处在前二十层。",
+     "cues_before": [
+      "enc"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "命中了缓存，但最后一段 SWA 没存下来。",
+     "spoken": "命中了缓存，但最后一段 S W A 没存下来。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这时，把命中前缀的最后 128 个 token，和新内容一起重算。",
+     "spoken": "这时，把命中前缀的最后 128 个 token，和新内容一起重算。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "第二处在后二十层。",
+     "spoken": "第二处在后二十层。",
+     "cues_before": [
+      "dec"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "每次 prefill，都只算末尾一小段。",
+     "spoken": "每次 prefill，都只算末尾一小段。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这一段的结果只给接下来的 decode 用，不进缓存。",
+     "spoken": "这一段的结果只给接下来的 decode 用，不进缓存。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 23.18,
+   "est_cues": {
+    "enc": 2.026,
+    "dec": 13.263
+   }
+  },
+  {
+   "id": "EP07-S08",
+   "sid": "S08",
+   "title": "文档说 128，代码要 140",
+   "line": 87,
+   "target_s": 36.0,
+   "facts": [
+    "F07-04",
+    "F07-05",
+    "F07-06"
+   ],
+   "badge": "B",
+   "scope": "mixed",
+   "scene": "EP07_S08",
+   "type": "anim",
+   "tone": "",
+   "visual": "左右对照。左卡\"部署问答\"：最后 128 个 token。右卡\"代码\"：`KEEP_TOKENS ≥ 128 + 6`；下方小卡\"README：140\"。右卡角落标\"默认关闭\"。",
+   "screen_text": [
+    "文档：最后 128 个",
+    "代码：至少 128 + 6",
+    "README：140"
+   ],
+   "notes": "",
+   "narration_written": "后二十层到底保留多少个位置？这里文档和代码的说法不一样。部署问答说，只重算提示词最后 128 个 token。代码要求保留的位置至少是窗口 128 再加 6。这个 6，是投机解码可能回退的 token 数。README 给 V4.1 的设置是 140，比下限多 6。多出来的这几个，代码和文档都没有解释。另外，这个功能在代码里默认是关的，要按 README 的设置打开。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "后二十层到底保留多少个位置？",
+     "spoken": "后二十层到底保留多少个位置？",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这里文档和代码的说法不一样。",
+     "spoken": "这里文档和代码的说法不一样。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "部署问答说，只重算提示词最后 128 个 token。",
+     "spoken": "部署问答说，只重算提示词最后 128 个 token。",
+     "cues_before": [
+      "doc"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "代码要求保留的位置至少是窗口 128 再加 6。",
+     "spoken": "代码要求保留的位置至少是窗口 128 再加 6。",
+     "cues_before": [
+      "code"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这个 6，是投机解码可能回退的 token 数。",
+     "spoken": "这个 6，是投机解码可能回退的 token 数。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "README 给 V4.1 的设置是 140，比下限多 6。",
+     "spoken": "Read me 给 V4.1 的设置是 140，比下限多 6。",
+     "cues_before": [
+      "readme"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "多出来的这几个，代码和文档都没有解释。",
+     "spoken": "多出来的这几个，代码和文档都没有解释。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "另外，这个功能在代码里默认是关的，要按 README 的设置打开。",
+     "spoken": "另外，这个功能在代码里默认是关的，要按 Read me 的设置打开。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 33.06,
+   "est_cues": {
+    "doc": 6.368,
+    "code": 10.699,
+    "readme": 18.883
+   }
+  },
+  {
+   "id": "EP07-S09",
+   "sid": "S09",
+   "title": "算一笔示意账",
+   "line": 102,
+   "target_s": 30.0,
+   "facts": [
+    "F07-10",
+    "F07-04"
+   ],
+   "badge": "E",
+   "scope": "mixed",
+   "scene": "EP07_S09",
+   "type": "anim",
+   "tone": "",
+   "visual": "两根横条对比（按比例）。上条\"不截断\"：40 段等长。下条\"截断后\"：前 20 段等长，后 20 段几乎看不见。右侧数字卡逐行出现。",
+   "screen_text": [
+    "不截断：400,000 行·层",
+    "截断后：202,800 行·层",
+    "约 50.7%（示意）"
+   ],
+   "notes": "",
+   "narration_written": "我们算一笔示意账。输入一万个 token。不截断时，四十层每层都算一万行，一共 400,000 行·层。截断后，前二十层照算，二十万；后二十层每层只算 140 行，一共 2,800。合计 202,800，大约是原来的一半。这就是文档说的\"几乎让 prefill 的总计算量减半\"。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "我们算一笔示意账。",
+     "spoken": "我们算一笔示意账。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "输入一万个 token。",
+     "spoken": "输入一万个 token。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "不截断时，四十层每层都算一万行，一共 400,000 行·层。",
+     "spoken": "不截断时，四十层每层都算一万行，一共 四十万 行·层。",
+     "cues_before": [
+      "full"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "截断后，前二十层照算，二十万；",
+     "spoken": "截断后，前二十层照算，二十万；",
+     "cues_before": [
+      "cut"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "后二十层每层只算 140 行，一共 2,800。",
+     "spoken": "后二十层每层只算 140 行，一共 两千八百。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "合计 202,800，大约是原来的一半。",
+     "spoken": "合计 二十万两千八百，大约是原来的一半。",
+     "cues_before": [
+      "total"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "这就是文档说的\"几乎让 prefill 的总计算量减半\"。",
+     "spoken": "这就是文档说的\"几乎让 prefill 的总计算量减半\"。",
+     "cues_before": [],
+     "pause_before": 0.6
+    }
+   ],
+   "est_s": 25.18,
+   "est_cues": {
+    "full": 3.979,
+    "cut": 8.766,
+    "total": 15.606
+   }
+  },
+  {
+   "id": "EP07-S10",
+   "sid": "S10",
+   "title": "这笔账简化了什么",
+   "line": 116,
+   "target_s": 24.0,
+   "facts": [
+    "F07-08",
+    "F07-10"
+   ],
+   "badge": "E",
+   "scope": "oss",
+   "scene": "EP07_S10",
+   "type": "anim",
+   "tone": "caveat",
+   "visual": "回到 S09 的下条。第 20 段（交接层）描红边并放大，标\"全长：归一化 + KV 投影\"。随后横条上方出现一行灰字\"行数 ≠ 计算量\"。",
+   "screen_text": [
+    "第 20 层：仍处理 10,000 行",
+    "行数 ≠ 计算量"
+   ],
+   "notes": "",
+   "narration_written": "但这笔账有两处简化。第一，第二十层是交接点。砍掉行数之前，它还要对全部一万行，做一次归一化和 KV 投影。第二，行数不等于计算量，每一行的注意力开销并不一样。所以，别把\"计算量减半\"理解成\"速度快一倍\"。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "但这笔账有两处简化。",
+     "spoken": "但这笔账有两处简化。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "第一，第二十层是交接点。",
+     "spoken": "第一，第二十层是交接点。",
+     "cues_before": [
+      "l20"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "砍掉行数之前，它还要对全部一万行，做一次归一化和 KV 投影。",
+     "spoken": "砍掉行数之前，它还要对全部一万行，做一次归一化和 K V 投影。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "第二，行数不等于计算量，每一行的注意力开销并不一样。",
+     "spoken": "第二，行数不等于计算量，每一行的注意力开销并不一样。",
+     "cues_before": [
+      "rows"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "所以，别把\"计算量减半\"理解成\"速度快一倍\"。",
+     "spoken": "所以，别把\"计算量减半\"理解成\"速度快一倍\"。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 20.32,
+   "est_cues": {
+    "l20": 2.47,
+    "rows": 10.71
+   }
+  },
+  {
+   "id": "EP07-S11",
+   "sid": "S11",
+   "title": "代价：它是近似",
+   "line": 128,
+   "target_s": 36.0,
+   "facts": [
+    "F07-03",
+    "F07-09",
+    "F07-11"
+   ],
+   "badge": "B",
+   "scope": "mixed",
+   "scene": "EP07_S11",
+   "type": "anim",
+   "tone": "cost",
+   "visual": "代价秤（Scale）：左盘\"换来：常数重算、prefill 约减半\"，右盘\"付出：近似的 SWA KV\"。下方代码卡：`yoco_equiv.py` 中比较 mask 与 compact 的一行，旁边打叉标注\"不比较：截断 vs 不截断\"。",
+   "screen_text": [
+    "换来：常数级重算",
+    "付出：近似结果",
+    "测试比的是两种截断写法"
+   ],
+   "notes": "",
+   "narration_written": "现在回答开头的问题：答案还对吗？有界重放得到的是近似的 SWA KV，DeepSeek 自己也这么说。仓库里有一个等价性测试。但它比较的是两种截断写法彼此一致，不是截断和不截断一致。精度上，官方只给了定性的说法：影响可以忽略。他们还在后训练里模拟了同样的重放，让模型提前适应。",
+   "chunks": [
+    {
+     "speaker": "n",
+     "written": "现在回答开头的问题：答案还对吗？",
+     "spoken": "现在回答开头的问题：答案还对吗？",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "有界重放得到的是近似的 SWA KV，DeepSeek 自己也这么说。",
+     "spoken": "有界重放得到的是近似的 S W A K V，DeepSeek 自己也这么说。",
+     "cues_before": [
+      "approx"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "仓库里有一个等价性测试。",
+     "spoken": "仓库里有一个等价性测试。",
+     "cues_before": [
+      "test"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "但它比较的是两种截断写法彼此一致，不是截断和不截断一致。",
+     "spoken": "但它比较的是两种截断写法彼此一致，不是截断和不截断一致。",
+     "cues_before": [],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "精度上，官方只给了定性的说法：影响可以忽略。",
+     "spoken": "精度上，官方只给了定性的说法：影响可以忽略。",
+     "cues_before": [
+      "report"
+     ],
+     "pause_before": 0.0
+    },
+    {
+     "speaker": "n",
+     "written": "他们还在后训练里模拟了同样的重放，让模型提前适应。",
+     "spoken": "他们还在后训练里模拟了同样的重放，让模型提前适应。",
+     "cues_before": [],
+     "pause_before": 0.0
+    }
+   ],
+   "est_s": 27.91,
+   "est_cues": {
+    "approx": 3.581,
+    "test": 9.39,
+    "report": 17.852
+   }
+  }
+ ]
+}

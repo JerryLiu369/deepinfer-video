@@ -1,0 +1,307 @@
+# EP04 事实账本（独立建账 a 版）
+# 代码基线：deepseek-ai/DeepInfer @ 9bd9cf243fc53ef9afbf8f04d391d989117d6ab9 (2026-10-21)
+episode: EP04
+facts:
+  - id: F04-01
+    claim: DeepInfer 仓库分为三层架构：Python 编排前端、纯 Host 侧 C++ 引擎核，以及底层的设备算子库与 TileLang 内核。
+    screen: 三层：Python/C++/算子
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:19-24"
+      - "csrc/pybind.cpp:6-13"
+    quote: "from deepinfer._C.engine import ( BlockManager, FlopsEstimator, RequestOutputPool, Scheduler, SchedulerOutputs, SequenceMetadata, SequenceMetadataPool, SequenceStatus"
+    commit: 9bd9cf2
+    kb: [R03#1, R03#4]
+    conditions: 官方代码结构定义；csrc 仅包含纯 Host 侧调度与元数据构建，无设备端代码
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-02
+    claim: 仓库代码物理行数统计显示，deepinfer/ 目录约 4.7 万行 Python 代码，csrc/ 目录包含 5,909 行 C++ 与头文件，deep_cluster/ 包含 656 行。
+    screen: 引擎4.7万行·C++近6千
+    grade: A
+    status: verified
+    evidence:
+      - "setup.py:22-39"
+      - "deepinfer/__init__.py:1-40"
+    commit: 9bd9cf2
+    calc: calc/EP04_loc.py
+    kb: [R03#1, R03#2]
+    conditions: 物理行数统计口径，基于 commit 9bd9cf2，排除 vendor 内第三方包
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-03
+    claim: 代码重心在算子层，tilelang_ops/ 目录共 93 个文件计 23,331 行，占 deepinfer/ 代码量的 49.5%；NVIDIA（cuda/）与昇腾（asc/）两套镜像各 30 个文件维护。
+    screen: 算子占半壁·双端各30文件
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/ops.py:1-22"
+    commit: 9bd9cf2
+    calc: calc/EP04_loc.py
+    kb: [R03#2, R03#5]
+    conditions: 物理行数统计，asc 目录 7,418 行，cuda 目录 4,968 行，接口与单测 10,945 行
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-04
+    claim: 仓库中带 Derived from vLLM 头部声明的文件仅有 23 个、合计 6,817 行，占一阶 Python 代码约 12.4%，全部位于引擎胶水层。
+    screen: 23文件派生·仅占12%
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:2"
+      - "deepinfer/worker/worker.py:2"
+    quote: "# Derived from vLLM; modified by DeepSeek."
+    commit: 9bd9cf2
+    calc: calc/EP04_loc.py
+    kb: [R03#3, R15#1]
+    conditions: 仅存在于 engine、worker、sequence 等胶水层；csrc、tilelang_ops、v4_modules 一行都没有
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-05
+    claim: 派生文件 API 指纹显示引擎骨架冻结在 vLLM v0.2.x 时代（如 4 元组配置 create_engine_configs 与 profile/init/warmup 三连方法）。
+    screen: 骨架源自v0.2.x时代
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/arg_utils.py:62-64"
+      - "deepinfer/worker/base.py:212-274"
+    quote: "def create_engine_configs(self,) -> tuple[ModelConfig, CacheConfig, ParallelConfig, SchedulerConfig]:"
+    commit: 9bd9cf2
+    kb: [R15#2, R15#3, R15#4]
+    conditions: 对应 2023 年底至 2024 年初的 vLLM 接口形态
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-06
+    claim: 基础设施文件 shm_broadcast.py 是后来单独从 vLLM v0.6.3+ 同步引入的，与上游相似度达 0.68，说明血统呈现分层演进。
+    screen: SHM广播后来同步自v0.6
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/distributed/shm_broadcast.py:33"
+      - "deepinfer/distributed/shm_broadcast.py:162"
+    commit: 9bd9cf2
+    kb: [R15#1, R15#7]
+    conditions: 为支持多进程无拷贝广播而单独引入
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-07
+    claim: DeepInfer 开源版定位为单模型离线推理引擎，模型注册表仅注册了 DeepseekV41ForCausalLM 一个架构。
+    screen: 唯一定位·单模型离线
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/__init__.py:15-17"
+    quote: '_MODELS = { "DeepseekV41ForCausalLM": ("deepseek_vl", "DeepseekVLForCausalLM"), }'
+    commit: 9bd9cf2
+    kb: [R03#7]
+    conditions: 纯文本与多模态统一走 deepseek_vl 实现
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-08
+    claim: 仓库中没有 AsyncLLM、没有流式输出，也没有 OpenAI 兼容 API 服务，唯一的 HTTP 服务是用于 torch profile 采样的 profile_server。
+    screen: 无在线服务·仅离线与探针
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/entrypoints/__init__.py:1"
+      - "deepinfer/engine/profile_server.py:1-40"
+    commit: 9bd9cf2
+    kb: [R03#14]
+    conditions: 面向离线评测与基准压测
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-09
+    claim: 一次离线推理始于 examples/offline_inference.py，构建 LLM 入口并调用 llm.generate() 发起批量请求。
+    screen: 入口：LLM.generate
+    grade: A
+    status: verified
+    evidence:
+      - "examples/offline_inference.py:27-35"
+      - "deepinfer/entrypoints/llm.py:90"
+    quote: "def generate( self, prompts: list[str] | None = None,"
+    commit: 9bd9cf2
+    kb: [R04#0]
+    conditions: 默认单机 8 卡 EP8 配置
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-10
+    claim: LLM._add_request 在入口层完成分词，将提示词转为 np.int32 数组后调用 LLMEngine.add_request，由 C++ Sequence 接管。
+    screen: 入口分词·转C++序列
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/entrypoints/llm.py:165-175"
+      - "deepinfer/engine/llm_engine.py:472-495"
+    commit: 9bd9cf2
+    kb: [R04#0, R15#10]
+    conditions: 避免在调度核心内发生字符串处理
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-11
+    claim: 进程模型中一个 LLMEngine 实例仅管理 cp_size 张卡，主进程为 driver（cp_rank=0），其余卡通过 spawn 启动为子进程 Worker。
+    screen: 主进程Driver·子进程Worker
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:377-395"
+      - "deepinfer/worker/base.py:186-187"
+    quote: "for cp_rank in range(1, cp_size): ... SpawnProcessWithCrashHeader"
+    commit: 9bd9cf2
+    kb: [R04#1]
+    conditions: 每张 GPU 绑定一个独立的 Worker 进程
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-12
+    claim: 仓库中没有张量并行（TP）通信组，多卡通信仅支持上下文并行（CP）、数据并行（DP）与专家并行（EP）。
+    screen: 无TP组·仅DP/CP/EP
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/config.py:171"
+      - "deepinfer/model_executor/parallel_utils/parallel_state.py:25-50"
+    quote: "self.model_parallel_size = self.context_parallel_size"
+    commit: 9bd9cf2
+    kb: [R04#1]
+    conditions: 生产与开源代码均放弃了卡内张量切分
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-13
+    claim: driver 与 follower 之间的控制面 RPC 采用共享内存环形队列（MessageQueue），只广播方法名和参数字典，无任何返回值。
+    screen: 单向SHM消息·无返回值
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/base.py:129-133"
+      - "deepinfer/worker/base.py:296-302"
+    quote: "method, kwargs = cp_broadcast_object(None); getattr(self, method)(**kwargs)"
+    commit: 9bd9cf2
+    calc: calc/EP04_shm_buffer.py
+    kb: [R04#2]
+    conditions: 1 MiB 环形槽位，典型消息仅数百字节
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-14
+    claim: 调度主体全在 C++，LLMEngine.step() 调用 self.scheduler.schedule()，调度器在释放 GIL 下运行并产出元数据与输出结构。
+    screen: C++调度·释放GIL
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:860"
+      - "csrc/engine/scheduler.hpp:276"
+      - "csrc/engine/scheduler.hpp:667"
+    quote: "py::gil_scoped_release release; // otherwise other python threads would be blocked"
+    commit: 9bd9cf2
+    kb: [R03#1, R04#7, R04#15]
+    conditions: 彻底消除了 Python 侧调度解释开销
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-15
+    claim: DP 副本之间每步通过 _dp_allreduce 进行两轮投票，强制全组 rank 在当前步同步决定执行 prefill 还是 decode，以防止 EP 通信死锁。
+    screen: DP组投票·统一步型防死锁
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:295-341"
+    quote: "int vote = _dp_allreduce(want_prefill ? 1 : 0, c10d::ReduceOp::RedOpType::MIN);"
+    commit: 9bd9cf2
+    kb: [R04#8]
+    conditions: ZOS 下该投票通过 Gloo 在 CPU 侧异步执行
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-16
+    claim: 当 DP 组内某 rank 无就绪请求时，必须执行占位陪跑步（_placeholder_seq_metadata），参与前向与 EP 通信以保证拓扑同步。
+    screen: 空闲Rank陪跑·对齐通信
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:961-975"
+      - "deepinfer/worker/model_runner.py:187"
+    commit: 9bd9cf2
+    kb: [R04#3, R04#13]
+    conditions: 专家并行 EP all-to-all 通信要求所有 rank 必须同步参与
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-17
+    claim: 模型每步执行顺序严格为：1. 主模型前向；2. 上一步后处理；3. 当前步采样；4. ZOS 下当前步后处理推迟至下一步以掩盖传输延迟。
+    screen: 前向→后处理前步→采样
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/worker.py:89-105"
+      - "deepinfer/worker/worker.py:121-187"
+    quote: "1. Forward current step (main model); 2. Post-process previous step; 3. Sample current step; 4. Post-process current step"
+    commit: 9bd9cf2
+    kb: [R04#5]
+    conditions: ZOS 错步流水线的核心骨架
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-18
+    claim: CUDA Graph 仅覆盖 decode 阶段的主模型前向计算，prefill 与 sampler 均走 eager 模式；图尺寸按 token 分桶阶梯捕获。
+    screen: 图仅覆盖解码前向·步长分桶
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/model_runner.py:73"
+      - "deepinfer/worker/model_runner.py:182"
+      - "deepinfer/worker/cuda_graph_runner.py:46-51"
+    commit: 9bd9cf2
+    calc: calc/EP04_cudagraph_batch.py
+    kb: [R04#11, R04#13]
+    conditions: 步长间隔默认 8，结合 2 的幂阶梯分桶
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-19
+    claim: 采样逻辑仅在 driver 上的 Sampler 执行，follower 节点的 Sampler 直接返回空结果，避免了无谓的采样状态通信。
+    screen: 仅Driver采样·从属返回空
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/sampler.py:136-161"
+    quote: "driver_inputs = sampler_inputs.driver ... if driver_inputs is None: return SamplerOutput(post_funcs=[])"
+    commit: 9bd9cf2
+    kb: [R04#4]
+    conditions: 采样输出统一由 driver rank 产生并交由 C++ 池
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-20
+    claim: RequestOutput 在 C++ 侧采用静态对象池（RequestOutputPool），step() 返回 uint64 内存指针数组，由 Python 侧 clone 保留。
+    screen: C++对象池·传指针句柄
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/outputs.hpp:176"
+      - "csrc/engine/outputs.hpp:306-307"
+      - "deepinfer/entrypoints/llm.py:179-182"
+    quote: "static std::vector<uint64_t> request_outputs(RequestOutputPool::max_size);"
+    commit: 9bd9cf2
+    kb: [R04#6]
+    conditions: 消除每步 Python 对象创建与 GC 压力
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-21
+    claim: 双硬件平台在 deepinfer/platform.py 中抽象，算子通过 tilelang_ops/ops.py 按平台动态切换，编译产物按 _so/<tag>/ 分离。
+    screen: 平台抽象·ops动态分流
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/platform.py:57"
+      - "deepinfer/platform.py:88"
+      - "deepinfer/model_executor/layers/tilelang_ops/ops.py:15-22"
+    commit: 9bd9cf2
+    kb: [R03#3, R03#5]
+    conditions: 同一套代码同时支持 NVIDIA CUDA 与昇腾 NPU
+    verified_by: fact-checker@2026-10-26
+
+  - id: F04-22
+    claim: deepinfer/__init__.py 开头明令严禁 import torch 或初始化设备，以避免主进程持有 CUDA 上下文导致 fork 子进程死锁。
+    screen: 严禁顶层导Torch·防死锁
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/__init__.py:1"
+    quote: "# 严禁在本文件内进行任何形式的 import torch 或初始化 device 的行为，会导致子进程的故障"
+    commit: 9bd9cf2
+    kb: [R03#2]
+    conditions: 强约束保障多进程架构初始化安全
+    verified_by: fact-checker@2026-10-26

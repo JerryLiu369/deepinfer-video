@@ -1,0 +1,162 @@
+# Facts shared across episodes use the G- prefix.
+episode: GLOBAL
+facts:
+  - id: G-01
+    claim: >-
+      本系列所有代码引用基于 deepseek-ai/DeepInfer @ 9bd9cf243fc53ef9afbf8f04d391d989117d6ab9（2026-10-21）。
+    screen: 代码版本 9bd9cf2
+    grade: A
+    status: verified
+    evidence:
+      - "setup.py:1-5"
+      - "versions.md:9 (knowledge base)"
+    commit: 9bd9cf2
+    kb: [versions]
+    conditions: "代码基线锁定于 2026-10-21 commit 9bd9cf2"
+    caveat: "若 P0 复核发现仓库有新提交，以 decisions.md 记录的新基线为准"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-02
+    claim: >-
+      DeepInfer 是 DeepSeek 支撑大规模云服务生产环境的推理框架开源版本，提供大规模离线推理能力（offline inference），只支持单一模型 DeepSeek-V4.1-Flash。
+    screen: 离线推理 · 仅支持V4.1-Flash
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:1-7"
+      - "doc/inference_deployment_qa.md:17-19"
+    kb: [R01#3]
+    conditions: "官方开源发布口径"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-03
+    claim: >-
+      DeepInfer 遵循 Apache 2.0 许可证开源；完整在线服务所需的 KV cache 系统、VE/Prefill/Decode 分离部署机制以及副本间负载均衡未包含在开源代码中。
+    screen: Apache 2.0 · 缺三项在线组件
+    grade: B
+    status: verified
+    evidence:
+      - "LICENSE:1-3"
+      - "README.md:38-42"
+      - "doc/inference_deployment_qa.md:21-22"
+    kb: [R01#3, R01#4]
+    conditions: "开源版本发布范围说明"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-04
+    claim: >-
+      DeepSeek 官方单一生产集群服务吞吐达到每天 155 万亿 Tokens，整体收入为每卡每小时 38 美金（按谷时定价折算）。
+    screen: 155万亿token/天 $38/时
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:17-18"
+      - "https://zhuanlan.zhihu.com/p/2095560295930508953"
+    kb: [R01#2]
+    conditions: "DeepSeek 单一生产集群、谷时定价口径、整体收入而非利润"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-05
+    claim: >-
+      DeepInfer 官方支持两套硬件平台：NVIDIA SM100 GPU 与华为昇腾 Ascend 950 NPU。
+    screen: SM100 / 昇腾 950
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:33-36"
+      - "csrc/README.md:1-10"
+    kb: [R01#0.1, R10#1]
+    conditions: "NVIDIA SM100 与华为昇腾 Ascend 950 硬件"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-06
+    claim: >-
+      DeepSeek-V4.1-Flash 模型主干共 40 层，全部采用 128 窗口的滑动窗口注意力（SWA）；全局块状 KV 仅由第 2、8、14、20 层产出；第 20 层之后的后 20 层复用第 20 层投影出的 KV（YOCO / CED 结构）。
+    screen: 40层SWA 4层KV YOCO
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/attn.py:242-248"
+      - "deepinfer/model_executor/models/v4_modules/yoco.py:15-22"
+      - "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/config.json"
+    commit: 9bd9cf2
+    kb: [R02a#1, R02b#1]
+    conditions: "DeepSeek-V4.1-Flash 模型架构定义"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-07
+    claim: >-
+      DeepSeek 官方生产推荐部署形态为 Prefill 与 Decode 分离部署：Prefill 采用标准 8 卡服务器（EP8），Decode 采用 64–128 卡宽专家并行超节点（EP64–EP128）；KV cache 存放在独立 3FS 存储集群并保留 72 小时以上。
+    screen: P/D分离 3FS留72h+
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:7-14"
+      - "doc/inference_deployment_qa.md:46-68"
+    kb: [R01#0.1, R08#1, R12#1]
+    conditions: "官方生产部署推荐架构与最小高效部署单元"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-08
+    claim: >-
+      DeepInfer 的设计特色均追溯至三个源头：模型结构（YOCO/SWA/MTP）、部署形态（P/D分离/宽EP/3FS外置）与生产需求（双硬件支持/批不变/确定性/低成本）。
+    screen: 三源头：模型·部署·生产
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:3-16"
+      - "docs/01_SERIES_BIBLE.md:5-15"
+    kb: [R01#1, R01#2]
+    conditions: "全系列核心分析框架"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-09
+    claim: >-
+      系列贯穿案例设为"第五轮请求"：已完成四轮对话的编程 agent 发来约 6 万 token 输入的长前缀上下文，要求输出结构化 JSON 修改计划。
+    screen: 贯穿案例：第五轮请求 ~6万token
+    grade: E
+    status: verified
+    evidence:
+      - "docs/01_SERIES_BIBLE.md:37-43"
+    conditions: "示意：虚构典型请求设定，非真实线上流量"
+    caveat: "贯穿案例为教学分析所设立的示意请求，用于串联长前缀命中、重放与解码"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-10
+    claim: >-
+      本系列所有系统运行行为、机制推导与代码分析均基于源码静态阅读与官方公开文档，未在真实硬件 SM100 或昇腾 950 上实际运行过。
+    screen: 基于源码与文档静态分析 · 无硬件实测
+    grade: B
+    status: verified
+    evidence:
+      - "docs/00_MASTER_SPEC.md:4"
+      - "README.md:33-36"
+    conditions: "视频制作边界声明"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-11
+    claim: >-
+      DeepSeek 官方关于开源 DeepInfer 的动机原话为：分享生产栈以帮助社区降低计算成本、减少能耗、使 AI 更可负担（lower compute costs, reduce energy use, and make AI more affordable）。
+    screen: 官方开源动机：降成本 · 降能耗
+    grade: B
+    status: verified
+    evidence:
+      - "https://x.com/deepseek_ai/status/2112476496283775135"
+      - "doc/inference_deployment_qa.md:15-16"
+    kb: [R01#1]
+    conditions: "官方 X 2026-10-20 公告原话"
+    verified_by: fact-checker@2026-10-25
+
+  - id: G-12
+    claim: >-
+      DeepInfer 生态中生产 API 请求协议转换与流式解析由独立开源仓库 deepseek-recipe 负责；底层算子依托 TileLang 开发，并依赖 vendor 目录下的 DeepEP、DeepGEMM、FlashMLA 等高性能通信与计算内核。
+    screen: recipe与底层算子
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:23"
+      - "doc/inference_deployment_qa.md:17-19"
+      - "versions.md:14-23"
+    kb: [R01#0.1, R03#1, R10#1]
+    conditions: "DeepInfer 软件依赖架构"
+    verified_by: fact-checker@2026-10-25

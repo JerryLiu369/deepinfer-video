@@ -1,0 +1,33 @@
+# EPxx 事实账本。格式：docs/05_FORMATS.md 第 1 节；流程：docs/06_FACT_PROTOCOL.md。
+# 校验：python tools/lint_facts.py EPxx --kb "$DV_KB"
+# 含 ": "、"#"、引号或以符号开头的值，用单引号包起来（单引号本身写成两个 ''），或用 >- 块写法。
+episode: EPxx
+facts:
+  - id: Fxx-01
+    claim: >-
+      一句完整的技术断言（中文，可含代码标识符）。
+    screen: 可以直接上屏的短写法（≤ 20 字）
+    grade: A                      # A 代码 / B 官方文档 / C 第三方实测 / D 社区说法 / E 推断或示意
+    status: pending               # verified / verified_with_caveat / unverifiable / conflict / pending
+    evidence:
+      - "deepinfer/path/to/file.py:123-130"
+    quote: >-
+      原文摘录（≤ 5 行，照抄）
+    commit: 9bd9cf2               # A 级必填
+    kb: [Rxx#n]                   # 线索来自哪条笔记
+    conditions: >-
+      谁说的/测的、硬件、配置、负载；默认值还是推荐值
+    caveat: >-
+      容易说错的地方（status 为 verified_with_caveat 时必填）
+    verified_by: fact-checker@P2
+
+  - id: Fxx-02
+    claim: >-
+      示意计算的例子。
+    grade: E
+    status: pending
+    evidence: ["calc/EPxx_example.py"]
+    calc: calc/EPxx_example.py
+    conditions: >-
+      示意：输入为假设值
+    verified_by: fact-checker@P2

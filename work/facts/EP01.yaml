@@ -1,0 +1,155 @@
+# EP01 事实账本。格式：docs/05_FORMATS.md 第 1 节；流程：docs/06_FACT_PROTOCOL.md。
+# 校验：python tools/lint_facts.py EP01 --kb "$DV_KB"
+episode: EP01
+facts:
+  - id: F01-01
+    claim: >-
+      大模型推理在生命周期上划分为两个截然不同的阶段：输入预填充阶段（Prefill）与逐 Token 自回归解码阶段（Decode）；Prefill 一次处理整段 Prompt 并写入初始 KV Cache，属于算力受限（Compute-bound）；Decode 每步仅为每个请求生成 1 到少量 Token，属于显存带宽受限（Memory-bandwidth bound）。
+    screen: Prefill算力·Decode带宽
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:39-43"
+      - "csrc/engine/scheduler.hpp:351-557"
+      - "csrc/engine/scheduler.hpp:558-690"
+      - "deepinfer/engine/engine_type.py:4-17"
+    commit: 9bd9cf2
+    kb: [R05#2, R13#5]
+    conditions: "现代大模型自回归推理基础分期特征"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-02
+    claim: >-
+      在 Decode 阶段单请求（Batch=1）运行时，每生成一个 Token 都需要将模型全部激活权重从 GPU 显存完整加载一遍，其算术强度（FLOP/Byte）极低（以 16B 激活参数 FP8 示意，每步计算 32 GFLOP 需搬运 16 GB 权重，算术强度仅 2.0 FLOP/Byte），计算核心利用率低于 1%，GPU 绝大部分时间处于等待显存搬运状态。
+    screen: 单请求强度仅2FLOP/B
+    grade: E
+    status: verified
+    evidence:
+      - "calc/EP01_intensity.py:10-35"
+      - "docs/02_EPISODE_OUTLINE.md:59"
+    calc: calc/EP01_intensity.py
+    conditions: "示意计算：16B 激活参数、FP8 精度权重（16 GB）、单 Token 计算 32 GFLOP、峰值 1000 TFLOPS、带宽 3.2 TB/s"
+    caveat: "此数值为单卡/单节点典型量级示意模型，非特定线上流量实测"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-03
+    claim: >-
+      批处理（Batching）通过让多个请求共享同一轮权重加载，使算术强度随 Batch Size 显著提升：当 Batch 从 1 扩大到 64 时，单步内 16 GB 权重仅加载一次即可同时服务 64 个 Token 的矩阵乘，算术强度提升 64 倍至 128.0 FLOP/Byte，计算核心利用率提升至约 40.8%，使单 Token 的硬件与显存搬运边际成本大幅下降。
+    screen: 批处理64倍摊薄搬运开销
+    grade: E
+    status: verified
+    evidence:
+      - "calc/EP01_intensity.py:37-60"
+      - "docs/02_EPISODE_OUTLINE.md:59-63"
+    calc: calc/EP01_intensity.py
+    conditions: "示意计算：Batch=64，总计算 2048 GFLOP，权重访存 16 GB，访存耗时约 5.0 ms，算力耗时从 0.032 ms 升至 2.048 ms"
+    caveat: "未计入随并发增加的 KV Cache 访存与通信开销，为权重主导区间的极限上界推导"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-04
+    claim: >-
+      键值缓存（KV Cache）是自回归推理的核心资源，用于保存历史 Token 的 Key 和 Value 向量以避免前向二次重算；KV Cache 占用显存随并发请求数和序列长度持续累加，是制约单机最大并发和长上下文服务容量的主要显存瓶颈（EP03 展开格式、EP06 展开管理）。
+    screen: KV Cache随序列线性膨胀
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:30-75"
+      - "deepinfer/worker/model_runner.py:100-140"
+    commit: 9bd9cf2
+    kb: [R02a#1, R06#1]
+    conditions: "自回归 Transformer 注意力状态保存机制"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-05
+    claim: >-
+      静态批处理（Static Batching）因请求输入长短不一与提前结束，会导致严重的显存与算力气泡；连续批处理（Continuous Batching）在迭代步（Iteration-level）粒度动态调度请求的加入与退出，彻底消除静态等待气泡，是现代推理引擎的通用调度基石。
+    screen: 连续批处理：按步动态调度
+    grade: B
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm.py:98-100"
+      - "vllm/v1/core/sched/scheduler.py:677-685"
+      - "docs/usage/v1_guide.md:69-74"
+    kb: [R03#3, R13#5]
+    conditions: "现代大模型服务迭代级调度技术标准"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-06
+    claim: >-
+      大模型在线推理服务的三个核心指标是：首 Token 延迟（TTFT，由 Prefill 耗时决定）、每个 Token 生成延迟（TPOT，由 Decode 步进耗时决定）以及系统吞吐（Throughput，单位时间处理 Token 总数）；吞吐决定了单 Token 的算力成本，而低 TTFT 与低 TPOT 保障了交互体验，引擎的工作就是在三者之间寻找最佳权衡。
+    screen: 核心指标：TTFT·TPOT·吞吐
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:115-130"
+      - "docs/01_SERIES_BIBLE.md:111-112"
+    kb: [R05#3, R16#4]
+    conditions: "LLM 在线推理服务 SLA 标准定义"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-07
+    claim: >-
+      混合专家模型（MoE）通过仅激活部分专家在控制每步计算量的同时扩展模型总容量；但在分布式部署中，不同专家分布在不同 GPU 上，每个 Token 必须通过全互联通信网络跨卡重排转发（Dispatch / Combine），通信时延与卡间负载不均衡成为分布式吞吐的新瓶颈（EP08 细讲）。
+    screen: 专家并行跨卡转发Token
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:461-480"
+      - "deepinfer/model_executor/parallel_utils/userbuffer.py:70-95"
+    commit: 9bd9cf2
+    kb: [R08#1, R10#1]
+    conditions: "分布式 MoE 专家并行通信拓扑"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-08
+    claim: >-
+      投机解码（Speculative Decoding）通过轻量草稿机制（如小模型或模型内置 MTP 模块）单步预测多个候选 Token，并由主模型在单次前向传播中并行打分验证，将原本低算术强度的逐 Token 循环转化为高算术强度的批量验证，从而有效打破 Decode 阶段的显存带宽瓶颈（EP09 细讲）。
+    screen: 投机解码：猜多验一破带宽
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/dflash_cuda_graph_runner.py:65-70"
+      - "csrc/engine/scheduler.hpp:917-925"
+    commit: 9bd9cf2
+    kb: [R02c#2, R09#1]
+    conditions: "多 Token 投机草稿生成与并行验证机制"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-09
+    claim: >-
+      Prefill 阶段（高计算强度、算力受限、吞吐敏感）与 Decode 阶段（低计算强度、显存带宽受限、延迟敏感）在硬件资源需求上存在不可调和的结构性冲突，促使大规模生产架构向 Prefill 与 Decode 物理节点分离部署（P/D 分离）演进（EP02、EP11 细讲）。
+    screen: P/D分离：化解物理资源冲突
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:7-14"
+      - "README.md:38-42"
+    kb: [R01#0.1, R12#1]
+    conditions: "云端规模化推理生产部署架构演进趋势"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-10
+    claim: >-
+      典型 16B 激活参数模型在 Prefill 阶段处理 4096 Token 输入时，算术强度高达 8,192 FLOP/Byte，远超现代 GPU 的 Roofline 饱和拐点（约 312.5 FLOP/Byte），计算核心全速满载；而 Decode 阶段 Batch=1 时算术强度仅 2.0 FLOP/Byte，两者算术强度相差超过 4,000 倍。
+    screen: 算术强度相差超4000倍
+    grade: E
+    status: verified
+    evidence:
+      - "calc/EP01_intensity.py:62-75"
+    calc: calc/EP01_intensity.py
+    conditions: "示意计算：16B 激活参数，FP8 权重 16 GB，4096 Prompt vs 1 Decode token"
+    caveat: "示意推算，不考虑 attention 二次项与硬件特定 kernel 调度损耗"
+    verified_by: fact-checker@2026-10-25
+
+  - id: F01-11
+    claim: >-
+      DeepInfer 专注于极端压榨生产环境的单 Token 吞吐与成本，围绕硬件访存与计算极限构建了 ZOS 零开销异步调度、SWA 有界重放、Wide-EP 宽专家并行与批不变性保障等全套自研优化技术链条。
+    screen: 围绕物理极限构建优化全景
+    grade: B
+    status: verified
+    evidence:
+      - "README.md:15-32"
+      - "doc/inference_deployment_qa.md:3-16"
+    kb: [R01#2, R03#1]
+    conditions: "DeepInfer 整体架构设计取向"
+    verified_by: fact-checker@2026-10-25
