@@ -237,3 +237,18 @@
 - 理由：恪守 Master Spec 全流程规范，提供广播级标准显存架构篇。
 - 影响的文件 / 集：EP06 全套交付物、`work/STATUS.md`、`work/decisions.md`
 - 决定人：showrunner / 委托人
+
+### D-017 · 2026-10-26 · EP08 全流程流水线完工交付与 48 kHz 硬字幕广播级成片归档
+- 背景：依照委托人指令，严格依照 docs/ 与 templates/ 规范，端到端完成 EP08《并行：注意力用 DP，专家用宽 EP》（3.13 分钟先导精讲版本）全流程流水线（P2 事实包、P3 方案、P4 脚本、P5 双审、P6 分镜、P7 配音、P8 动画、P9 成片与手册）。
+- 决定：
+  1. P2 事实包：构建两套标准计算脚本 `work/calc/EP08_wide_ep_bandwidth.py`（推导 EP8 52 专家 vs EP64 7 专家的 7.43 倍访存削减与 256 并发 5% 吞吐收敛）与 `work/calc/EP08_mirror_cp_balance.py`（Zigzag 因果工作量严格恒等证明），事实账本 `work/facts/EP08.yaml` 录入 15 条核验事实（A×13, B×2），lint_facts 0 错误 0 警告，编写研究简报 `work/research/EP08.md`；
+  2. P3 剧集方案：编制 `work/treatments/EP08.md`（7 节拍骨干精讲架构），冷开场 A（数据反差与 Wide-EP 悖论）胜出，明确 DP/EP 正交解耦、MoE 六段流水、EPLB 两级贪心与 NVLink 显存直读主线；
+  3. P4 脚本：编制 `work/scripts/EP08.md`（7 镜头，严禁禁用词，单句控制在 42 字以内，包含 4 处 Q 真实提问），通过 `parse_script.py` 与 `lint_script.py` 校验（0 错误 0 警告）；
+  4. P5 双审：`tech-reviewer` 与 `viewer` 独立双审，viewer 闭卷作答 5 道核心题 5/5 全对，输出 `work/reviews/EP08_tech_r1.md` 与 `work/reviews/EP08_viewer_r1.md`，全票放行；
+  5. P6 分镜：编制 `work/storyboards/EP08.md`（7 镜头动作 100% 覆盖 cue 点），art-director 纸面审放行（`work/reviews/EP08_board.md`）；
+  6. P7 配音与粗剪：阿里云百炼 Qwen-Audio-3.1-TTS-Plus 完成 7 镜头全量配音（3.12 min，长暗欢+凌心双音色），timing 提取完成；
+  7. P8 动画实现与审片：`work/scenes/EP08.py` 实现全部 7 个镜头类，`render.py` preview 与 final 渲染全部 OK 且 0 [dvlib] WARN，生成 25 张关键帧与 3 张拼图，美术审 `work/reviews/EP08_visual_r1.md` 与屏幕技术审 `work/reviews/EP08_frames_r1.md` 全票通过；
+  8. P9 成片与手册：`tools/make_episode.sh EP08 final` 执行成功，输出 1920×1080 30 fps H.264、48 kHz 广播级立体声 AAC、ASS 像素级内嵌硬字幕、7 章节标记成片至 `work/release/EP08.mp4`（03:07.66）与 `work/release/EP08.srt`，响度 -16.09 LUFS（合规 -16 ± 1 LUFS，True Peak -1.50 dBTP），QC 检查单全通（`work/reviews/EP08_qc.md`），一页纸观看手册 `work/release/companion/EP08.md` 交付归档。
+- 理由：恪守 Master Spec 全流程规范，提供广播级标准并行篇。
+- 影响的文件 / 集：EP08 全套交付物、`work/STATUS.md`、`work/decisions.md`
+- 决定人：showrunner / 委托人

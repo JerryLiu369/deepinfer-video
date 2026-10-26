@@ -1,0 +1,212 @@
+# EP08 事实账本：并行：注意力用 DP，专家用宽 EP
+episode: EP08
+facts:
+  - id: F08-01
+    claim: DeepInfer 进程组将全局 rank 按 replica、dp、cp 拆分；开源代码配置中没有张量并行（tensor_parallel_size），model_parallel_size 直接等同于 context_parallel_size。
+    screen: 无 TP · MP 等同于 CP
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/parallel_utils/parallel_state.py:80-99"
+      - "deepinfer/config.py:150-174"
+    quote: "self.model_parallel_size = self.context_parallel_size"
+    commit: 9bd9cf2
+    kb: [R08#1, R08#4]
+    conditions: 针对 DeepInfer 引擎整体架构与并行配置
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-02
+    claim: Attention 使用数据并行（DP），MoE 使用专家并行（EP），默认配置下 dp_size 等于 ep_size // cp_size，当 cp=1 时 DP 数严格等于 EP 数。
+    screen: 注意力 DP · 专家 EP
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/config.py:161-163"
+      - "examples/offline_inference.py:27-29"
+    quote: "data_parallel_size = max(1, expert_parallel_size // context_parallel_size)"
+    commit: 9bd9cf2
+    kb: [R08#2, R08#3]
+    conditions: 针对离线推理与模型执行器默认初始化
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-03
+    claim: DP 副本之间不要求同步 batch 大小，只通过 C++ 调度器在 DP 组内执行 MIN all_reduce 投票同步步型（决定做 prompt 还是 decode）。
+    screen: 仅同步步型 · 不同步批大小
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:295-322"
+    quote: "do_prefill = (_dp_allreduce(want ? 0 : 1, c10d::ReduceOp::MIN) == 0);"
+    commit: 9bd9cf2
+    kb: [R08#16]
+    conditions: C++ 调度器 NORMAL 引擎类型
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-04
+    claim: 调度器通过第二轮 DP 投票防止空 prompt 步造成死循环；当同组确有 rank 执行 prefill 时，无活 rank 执行 1-token placeholder 陪跑步以对齐 EP 集合通信。
+    screen: 占位陪跑 · 集合通信对齐
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:326-341"
+      - "deepinfer/worker/worker.py:125-127"
+      - "deepinfer/worker/model_runner.py:386-403"
+    quote: "bool any_scheduled = (_dp_allreduce(outputs ? 0 : 1, c10d::ReduceOp::MIN) == 0);"
+    commit: 9bd9cf2
+    kb: [R08#17, R08#18]
+    conditions: 保证 EP dispatch/combine 在所有 rank 步数严格对齐
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-05
+    claim: MoE 层一次前向包含六段流水：本地 Gate 计算、DeepEP dispatch 变长全交换、两个 Grouped GEMM、共享专家并行计算、DeepEP combine 融合归约以及事件等待。
+    screen: MoE 六段流水线
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:468-511"
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:574-610"
+    quote: "event_overlap = self.combine(moe_out_hidden, shared_out, handle, combine_pre_evt)"
+    commit: 9bd9cf2
+    kb: [R08#2, R08#10, R08#13]
+    conditions: 当非 NVLink 域内 mega MoE 时执行标准 DeepEP 流水
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-06
+    claim: 共享专家前向在 limit_num_sms 限制下扣减通信 SM 与 combine 通信并发执行，并将输出作为 bias 直接传入 combine 融合进归约 epilogue，无需独立 all_reduce。
+    screen: 共享专家隐式融合归约
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:601-605"
+      - "deepinfer/model_executor/parallel_utils/userbuffer.py:40-51"
+    quote: "with limit_num_sms(envs.DEEPINFER_USERBUFFER_COMM_SMS, enabled=PLATFORM.is_gpu): shared_out = self.shared_forward(hidden_states)"
+    commit: 9bd9cf2
+    kb: [R08#13, R08#45]
+    conditions: GPU 平台下开启通信与计算重叠
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-07
+    claim: 在 NVLink 物理域内且精度支持时，DeepInfer 使用 Mega MoE 单 kernel 融合 dispatch、GEMM 和 combine，跳过逐层 DeepEP 缓冲区调用。
+    screen: Mega MoE 单核融合
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:184-188"
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:528-559"
+    quote: "self.use_mega_moe = ((PLATFORM.is_gpu or self.mma_type == 'fp8xfp4') and self.mma_type in (...) and PG.is_within_nvl_domain(PG.expert_parallel_group()))"
+    commit: 9bd9cf2
+    kb: [R08#14]
+    conditions: 仅在 NVLink 域内（如 72 卡 NVL 域）生效
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-08
+    claim: 冗余专家数计算公式为：在 min_num_extra_experts 下限基础上向上对齐，确保总物理专家数能被 ep_size 整除；EP64 下 384 个逻辑专家加 64 个冗余对齐到 448（每卡 7 专家），EP8 下加 32 个冗余对齐到 416（每卡 52 专家）。
+    screen: 冗余专家整除对齐
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/eplb/__init__.py:21-28"
+      - "doc/inference_deployment_qa.md:103"
+    quote: "padding = -(num_routed_experts + min_num_extra_experts) % ep_size"
+    commit: 9bd9cf2
+    kb: [R08#31, R16#8]
+    conditions: 官方 V4.1-Flash 384 个路由专家与默认冗余配置
+    calc: calc/EP08_wide_ep_bandwidth.py
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-09
+    claim: EPLB 采用逐层两级贪心策略：第一级按窗口内历史负载贪心挑选热点逻辑专家追加冗余副本；第二级按最小化各步最慢 rank 负载之和将物理槽位装箱到各卡。
+    screen: EPLB 两级贪心重排
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/eplb/policy.py:43-70"
+      - "deepinfer/model_executor/eplb/policy.py:99-123"
+    quote: "rebalance_experts_global(logical_expert_token_counts, num_physical_experts, num_local_physical_experts)"
+    commit: 9bd9cf2
+    kb: [R08#32, R08#33]
+    conditions: 逐层独立计算装箱，确保布局自洽与确定性
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-10
+    claim: 权重重排在同一 NVLink 域内通过 symm_mem 与 CUDA IPC 共享内存直接读取对端显存（单层镜像逐层复用，无 P2P 通信）；跨机跨域才退回 NCCL 分桶 batch_isend_irecv。
+    screen: symm_mem 显存直读
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/eplb/__init__.py:195-220"
+      - "deepinfer/model_executor/eplb/shuffle.py:150-176"
+    quote: "self._intranode_shuffle = PG.is_within_nvl_domain(ep_group) and PLATFORM.is_gpu"
+    commit: 9bd9cf2
+    kb: [R08#38]
+    conditions: 依赖 NVLink 拓扑且限 GPU 平台
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-11
+    claim: 官方部署文档披露，Prefill 阶段 EPLB 设置为每卡 4 冗余专家、100 步统计窗口、1,000 步重排周期（实测 moe_lb 为 1.074 / 1.045）；Decode 阶段设置为每卡 1 冗余专家、1,000 步统计窗口、10,000 步重排周期（实测 moe_lb 为 1.090）。
+    screen: P/D 差异化 EPLB 周期
+    grade: B
+    status: verified_with_caveat
+    evidence:
+      - "doc/inference_deployment_qa.md:99,103"
+    quote: "Prefill settings: start from 4 redundant experts per GPU ... a re-assignment every 1,000 steps ... Decode: start from 1 redundant expert ... every 10,000 steps"
+    kb: [R08#40, R16#13]
+    conditions: DeepSeek 官方生产文档披露数据
+    caveat: 官方在不同文档及知乎披露的 moe_lb 数字存在细微口径差异（如 1.074 vs 1.0618），且代码中默认关闭自动重排，需显式设环境变量
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-12
+    claim: 官方 sweep 曲线显示，从 EP8 提升到 EP64，单卡本地 MoE 专家权重读取量理论削减 7.43 倍（52 个降至 7 个），但在低并发（并发 8）时吞吐提升 52.9%，在高并发（并发 256）时吞吐增益收敛至约 5.0%（26,100 vs 24,850 tokens/s/GPU）。
+    screen: 访存少7.4倍·高并发吞吐收敛5%
+    grade: A
+    status: verified_with_caveat
+    evidence:
+      - "doc/images/wide_ep_decode_pareto.png"
+      - "doc/inference_deployment_qa.md:57,103"
+    quote: "Wide-EP substantially reduces per-step memory traffic in the MoE expert part and, with good EPLB support, effectively raises TPS."
+    commit: 9bd9cf2
+    kb: [R16#2, R16#7, R16#9, R08#47]
+    conditions: 64 卡 SM100、131K 上下文、固定 nextn=3、假设接受率 75%
+    calc: calc/EP08_wide_ep_bandwidth.py
+    caveat: 官方吞吐数字含 tau=3.25 假定接受率折算系数；高并发时全卡聚合批增大使得访存瓶颈转移至通信与启动开销
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-13
+    claim: 代码中的 mirror CP 通过 zigzag 镜像分配将序列划分为 2*cp 块，rank r 分配第 r 块与第 2cp-1-r 块，使每个 rank 承担的因果注意力计算量严格恒定平衡。
+    screen: Zigzag 镜像平衡因果计算
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/prepare_cp_mirror.py:143-156"
+      - "deepinfer/model_executor/input_metadata/input_metadata.py:169-180"
+    quote: "for half, block in enumerate((rank, 2 * cp_size - 1 - rank)):"
+    commit: 9bd9cf2
+    kb: [R08#23, R08#24]
+    conditions: 仅在 Prefill 阶段生效（assert self.is_prompt）
+    calc: calc/EP08_mirror_cp_balance.py
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-14
+    claim: 官方部署文档明确指出，生产环境目前不使用 TP 和 CP（TP and CP are not used for now）；CP 完备实现保留在开源代码中作为超长序列预填加速器。
+    screen: 生产不启用 TP 与 CP
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:53"
+    quote: "- TP and CP are not used for now."
+    kb: [R08#30, R16#15]
+    conditions: 官方云服务生产部署说明
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-15
+    claim: 全局退出判定通过 DP 组内的 MAX all_reduce 统一未完成请求状态，防止提前做完的 rank 退出导致其它卡在 EP 集合通信处永久挂死。
+    screen: MAX all_reduce 防挂死
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:665-679"
+    quote: "dist.all_reduce(unfinished, op=dist.ReduceOp.MAX, group=dp_group)"
+    commit: 9bd9cf2
+    kb: [R08#21]
+    conditions: 分布式推理运行时守护规则
+    verified_by: fact-checker@2026-10-26
