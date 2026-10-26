@@ -222,3 +222,18 @@
 - 理由：保留可追溯的产物，去掉不可复现、不可移植的部分。
 - 影响的文件 / 集：`tools/`、`work/calc/`、`work/facts/`、`work/research/`、`docs/`、`AGENTS.md`、`README.md`
 - 决定人：委托人
+
+### D-016 · 2026-10-26 · EP06 全流程流水线完工交付与 48 kHz 硬字幕广播级成片归档
+- 背景：依照委托人指令，严格依照 docs/ 与 templates/ 规范，端到端完成 EP06《KV 与状态缓存：两种记忆，两种管法》（9.86 分钟）全流程流水线（P2 事实包、P3 方案、P4 脚本、P5 双审、P6 分镜、P7 配音、P8 动画、P9 成片与手册）。
+- 决定：
+  1. P2 事实包：构建 3 套标准计算脚本 `work/calc/EP06_bytes.py`（精确推导 FP4 288B/tok、MXFP8 528B/tok、IndexK 68B 与 lcm(128, 288)=1152B 对齐）、`EP06_state_disk.py`（精确推导单序列固定落盘 1,415,040 字节即 1.35 MiB 与 262 环 2,766,720 字节）、`EP06_capacity.py`（推导 80GB 显卡 90% 利用率与扣除 2×StateBuffer 后的 39,236 物理块规划及 80% 硬约束校验），事实账本 `work/facts/EP06.yaml` 录入 20 条核验事实（A×17, B×3），lint_facts 0 错误 0 警告，编写研究简报 `work/research/EP06.md`；
+  2. P3 剧集方案：编制 `work/treatments/EP06.md`（20 节拍，系统拆解显存双轨制、物理块扁平切片、三个 128 解耦、开源无前缀树真相与生产三层立面），冷开场 A（显存双曲线剧烈反差）盲选胜出（`work/reviews/EP06_hook.md`）；
+  3. P4 脚本：编制 `work/scripts/EP06.md`（20 镜头，严禁所有禁用词，单句长度严格控制在 42 字以内，包含 3 处 Q 提问，条件标注完整），通过 `parse_script.py` 与 `lint_script.py` 校验（0 错误 0 警告）；
+  4. P5 双审：`tech-reviewer` 与 `viewer` 独立双审，viewer 闭卷作答 5 道核心题 5/5 全对，输出 `work/reviews/EP06_tech_r1.md` 与 `work/reviews/EP06_viewer_r1.md`，全票放行；
+  5. P6 分镜：编制 `work/storyboards/EP06.md`（20 镜头动作 100% 覆盖 cue 点），art-director 纸面审放行（`work/reviews/EP06_board_r1.md`）；
+  6. P7 配音与粗剪：阿里云百炼 Qwen-Audio-3.1-TTS-Plus 完成 20 镜头全量配音（9.85 min，长暗欢+凌心双音色），pacing 报告 0 错误；
+  7. P8 动画实现与审片：`work/scenes/EP06.py` 实现全部 20 个镜头类，`render.py` preview 与 final 渲染 20 镜全部 OK 且 0 [dvlib] WARN，生成 85 张关键帧与 8 张拼图，美术审 `work/reviews/EP06_visual_r1.md` 与屏幕技术审 `work/reviews/EP06_frames_r1.md` 全票通过；
+  8. P9 成片与手册：`tools/make_episode.sh EP06 final` 执行成功，输出 1920×1080 30 fps H.264、48 kHz 广播级立体声 AAC、ASS 像素级内嵌硬字幕、20 章节标记成片至 `work/release/EP06.mp4`（09:51.62，约 9.86 分钟）与 `work/release/EP06.srt`，响度 -16.00 LUFS（精确吻合），QC 检查单全通（`work/reviews/EP06_qc.md`），一页纸观看手册 `work/release/companion/EP06.md` 交付归档。
+- 理由：恪守 Master Spec 全流程规范，提供广播级标准显存架构篇。
+- 影响的文件 / 集：EP06 全套交付物、`work/STATUS.md`、`work/decisions.md`
+- 决定人：showrunner / 委托人

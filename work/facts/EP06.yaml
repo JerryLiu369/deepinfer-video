@@ -1,0 +1,344 @@
+# EP06 事实账本：KV 与状态缓存：两种记忆，两种管法
+# 代码基线：deepseek-ai/DeepInfer @ 9bd9cf243fc53ef9afbf8f04d391d989117d6ab9 (2026-10-21)
+episode: EP06
+facts:
+  - id: F06-01
+    claim: >-
+      代码中存在三个完全不同且相互独立的 128：① block_size = 128 token（逻辑块 token 容量）；② KVSTORE_GRAIN = 128 token（状态落盘粒度）；③ 128 字节硬件内存对齐（DeepGEMM / MXFP8 block_stride 对齐要求）。
+    screen: 三个128：块·粒度·字节对齐
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/model_metadata_utils.py:134-135"
+      - "deepinfer/worker/cache_engine.py:32-33"
+      - "deepinfer/model_executor/model_metadata_utils.py:138-140"
+    quote: >-
+      resolved_tokens_per_block: return 128; KVSTORE_GRAIN = 128; MXFP8 / sparse FP4 cache requires 128-byte block alignment.
+    commit: 9bd9cf2
+    calc: calc/EP06_bytes.py
+    kb: [R06#1]
+    conditions: 官方代码中三个 128 分别代表 token 数量、落盘步长与字节对齐，不可混为一谈
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-02
+    claim: >-
+      块大小硬编码为 128 个压缩前 token，与压缩率无关；压缩层每个物理块实际存放 128 // ratio 个 token（C1 层存 128 个，C2 层存 64 个）。
+    screen: 块硬编码128·压缩层按比例减半
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:452-453"
+      - "deepinfer/worker/cache_engine.py:433-434"
+      - "deepinfer/engine/arg_utils.py:84-97"
+    quote: >-
+      token_per_block = block_size // ratio; delta = token_per_block * self._bytes_per_token
+    commit: 9bd9cf2
+    kb: [R06#2]
+    conditions: V4.1 模型支持 compress_ratio in {1, 2}，压缩后 token 数对应减少
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-03
+    claim: >-
+      每个 KV block 在显存中是一整段扁平连续的 uint8 字节带，按运行时层序切段，每层内部做 32 字节对齐，整块最终按 lcm(128, bytes_per_token) 向上对齐（FP4 主 KV 为 1152 字节，MXFP8 主 KV 为 4224 字节）。
+    screen: 扁平字节带·层间32B整块对齐
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:479-484"
+      - "deepinfer/worker/cache_engine.py:437-439"
+      - "deepinfer/worker/cache_engine.py:459-461"
+    quote: >-
+      block_alignment = math.lcm(self._align_to, self._bytes_per_token); self.kv_total_in_bytes = _align_to_multiple(self._kv_offset, 1, block_alignment)
+    commit: 9bd9cf2
+    calc: calc/EP06_bytes.py
+    kb: [R06#3]
+    conditions: block 不是每层一个独立张量，而是单一张量切片寻址
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-04
+    claim: >-
+      每 token 字节数严格由量化格式决定：Main KV 在 FP4 格式下为 288 字节（256B 数据 + 32B 缩放因子），MXFP8 下为 528 字节；Indexer K 在 FP4 下为 68 字节（64B 数据 + 4B 缩放因子），MXFP8 下为 132 字节；SWA KV 永远为 528 字节 MXFP8。
+    screen: 主KV 288B·SWA 528B
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/cache_common.py:99-155"
+      - "deepinfer/worker/cache_engine.py:261-263"
+    quote: >-
+      V41_FORMAT = KVCacheFormat(quantized_dtype="e4m3", quantized_elements=512, elements_per_sf=32, sf_format="ue8m0"); V41_FP4_FORMAT = ... "e2m1", 512, elements_per_sf=16, sf_format="e4m3"
+    commit: 9bd9cf2
+    calc: calc/EP06_bytes.py
+    kb: [R06#4]
+    conditions: 开源默认开启 use_fp4_sparse_kv=True
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-05
+    claim: >-
+      TileLang 内核中分页 KV 的统一槽位计算公式为 slot = block_id * tokens_per_block + offset，-1 表示无效填充不存储；prefill 写入新 KV 与 decode 读写完全复用同一公式。
+    screen: 槽位公式：块号×容量+偏移
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/store_kv_cache.py:48-52"
+      - "deepinfer/model_executor/layers/tilelang_ops/store_kv_cache.py:106-107"
+      - "deepinfer/model_executor/layers/tilelang_ops/get_kv_index.py:51-56"
+    quote: >-
+      slot_mapping: [n], int32; -1 denotes padding and is not stored; safe_slots // block_size, safe_slots % block_size
+    commit: 9bd9cf2
+    kb: [R06#8]
+    conditions: prefill 与 decode 在 GPU 端统一通过一维 slot_mapping 寻址
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-06
+    claim: >-
+      物理块 0 永远保留不用，代表空块；C++ BlockManager 本质是 FIFO 双向链表加引用计数（ref_count），可用块数为 num_gpu_blocks - 1，且没有 LRU 淘汰机制。
+    screen: 块0永不用·FIFO双链表管理
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/block_manager.hpp:27-35"
+      - "csrc/engine/block_manager.hpp:82-103"
+    quote: >-
+      // NOTE: gpu blocks 0 是不用的，所以这里 0 代表空; Blocks(int _n) : _blocks(_n), _head(1), _tail(_n - 1), _size(_n - 1)
+    commit: 9bd9cf2
+    kb: [R06#9]
+    conditions: 块释放时仅将 ref_count 归零并 push_back 到 tail，无缓存热度统计
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-07
+    claim: >-
+      系统维护两套独立的 BlockManager：一套管理分页 KV 块（动态变长），一套管理定长 StateBlock 槽位（每个活跃请求占 1 槽）；Scheduler 在准入时进行联合检查，任何一边不足均拒绝准入。
+    screen: 双分配器：块与状态联合准入
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:265-266"
+      - "csrc/engine/scheduler.hpp:194-201"
+    quote: >-
+      self.block_manager = BlockManager(cache_config.num_gpu_blocks); self.state_manager = BlockManager(cache_config.num_state_seqs) ... block + state 的联合分配检查
+    commit: 9bd9cf2
+    kb: [R06#11]
+    conditions: state 槽位复用 BlockManager 的整型槽分配器逻辑
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-08
+    claim: >-
+      每个序列的 StateBlock 槽位由存储区与丢弃区组成：低地址为存储区（stored region，前 20 层需落盘的 SWA 环），高地址为丢弃区（dropped region，后 20 层 consumer SWA 环及逐层 ica_state / ca_state 压缩边界累加器）。
+    screen: 存储区在前·丢弃区在后
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:221-241"
+      - "deepinfer/worker/cache_engine.py:348-362"
+    quote: >-
+      [stored region: SWA] [dropped region: YOCO consumer SWA | compression state]; state_size_to_disk 仅包含需落盘 SWA 的 inference 窗口
+    commit: 9bd9cf2
+    kb: [R06#12, R06#13]
+    conditions: 落盘时直接按 state_size_to_disk 前缀截断即可自然排除丢弃区
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-09
+    claim: >-
+      推理时 SWA 环形缓冲区长度为 134 token，由 128（局部注意力滑窗大小）加上 6（最大回退预算 MAX_BACKTRACKING_TOKENS，即 nextn 投机解码 5 + 1）组成，用于容忍投机回退与跨边界滞后。
+    screen: 134窗口：128滑窗+6回退预算
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:88-93"
+      - "deepinfer/environ.py:128-132"
+    quote: >-
+      return (window_size + envs.DEEPINFER_MAX_BACKTRACKING_TOKENS) if window_size > 0 else 0; MAX_BACKTRACKING_TOKENS = max(v, 5+1)
+    commit: 9bd9cf2
+    calc: calc/EP06_state_disk.py
+    kb: [R06#16]
+    conditions: 默认环境变量 USE_NEXTN_DECODE=5，MAX_BACKTRACKING_TOKENS 默认取 6
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-10
+    claim: >-
+      在 kvstore 存储视角，开启 EXTRA_STATE 时环形缓冲区为 262 token（134 + 128 余量），落盘前需通过 CUDA kernel 将 262 环重排线性化为 134 连续窗口；默认关闭 EXTRA_STATE 时槽内环即为 134，落盘直接零重排整段拷贝。
+    screen: 262环卷成134·默认零重排拷贝
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:101-110"
+      - "deepinfer/worker/cache_engine.py:788-797"
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/state_cache.py:55-67"
+    quote: >-
+      get_inference_swa_block_size(window_size) + (envs.DEEPINFER_PREFILL_STORE_EXTRA_SIZE ...); 无 prefill-extra 时 state 不需要重排，直接整段读出 / copy
+    commit: 9bd9cf2
+    calc: calc/EP06_state_disk.py
+    kb: [R06#16, R06#19]
+    conditions: 默认 PREFILL_STORE_EXTRA_STATE=False；测试与特定截断模式下为 True
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-11
+    claim: >-
+      每个序列落盘的状态数据量完全固定：仅包含前 20 层需落盘的 SWA 环，即 20 层 × 134 token × 528 字节 = 1,415,040 字节（精确等于 1.3495 MiB），与上下文总长度 L 彻底脱钩。
+    screen: 每序列落盘固定1,415,040字节
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:306"
+      - "doc/inference_deployment_qa.md:169"
+    quote: >-
+      self.state_size_to_disk = self.swa_store_total_bytes_inference_pad; Only state_size_to_disk = 20 layers × 134 tokens × 528 B = 1,415,040 B per sequence goes into the store.
+    commit: 9bd9cf2
+    calc: calc/EP06_state_disk.py
+    kb: [R06#21]
+    conditions: 官方代码计算与官方 QA 文档数字完全一致
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-12
+    claim: >-
+      落盘边界与时机：KVSTORE_GRAIN = 128，状态仅在 token 数为 128 的整数倍边界处落盘，落盘窗口为开区间右端 [pos-134, pos)；chunked prefill 期间中间 chunk 不落盘，仅最后一个 chunk 触发落盘。
+    screen: 128边界落盘·分块仅末尾落盘
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/cache_engine.py:32-33"
+      - "deepinfer/worker/cache_engine.py:785-787"
+      - "doc/inference_deployment_qa.md:165"
+    quote: >-
+      assert last_hit_position % KVSTORE_GRAIN == 0; Nothing is stored part-way through a chunked prefill — only the last chunk stores.
+    commit: 9bd9cf2
+    kb: [R06#17, R06#36]
+    conditions: 代码断言对齐约束，部署文档明确分块推理仅末尾落盘
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-13
+    claim: >-
+      decode 期间的 state 副本区 copy_state 在开源基类中仅声明为 None 且 should_copy_state 恒返回 False；但在显存容量规划中，系统显式执行 state_size *= 2 为 state store 与 copy buffer 预留双倍显存空间。
+    screen: 显存预留双倍StateBuffer
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:284-285"
+      - "deepinfer/engine/llm_engine.py:811-813"
+      - "deepinfer/worker/base.py:243"
+    quote: >-
+      self.copy_state: torch.Tensor | None = None; def should_copy_state(self, seq) -> bool: return False; state_size *= 2  # state store & copy buffer, 所以要开两倍大小
+    commit: 9bd9cf2
+    calc: calc/EP06_capacity.py
+    kb: [R06#22]
+    conditions: 显存规划硬编码乘以 2，开源引擎未分配具体缓冲区
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-14
+    claim: >-
+      显存容量规划公式：从总显存按 gpu_memory_utilization（默认 0.90）扣除实测峰值 peak，再扣除双倍 state 内存（2 * state_bytes），剩余显存除以每块字节数向下取整得到物理块数，并在所有 rank 间求算术平均并截断为偶数。
+    screen: 显存规划：扣除两倍State算块数
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/base.py:217-246"
+      - "deepinfer/worker/base.py:264-267"
+      - "deepinfer/engine/arg_utils.py:34"
+    quote: >-
+      available_kv_cache_memory = total_gpu_memory * self.cache_config.gpu_memory_utilization - peak_allocated_memory; available_kv_cache_memory -= state_size; num_gpu_blocks = int(available_kv_cache_memory // cache_block_size)
+    commit: 9bd9cf2
+    calc: calc/EP06_capacity.py
+    kb: [R06#29]
+    conditions: 源码 cross-rank 归并实际执行 all_reduce(SUM) // world_size // 2 * 2（算术平均而非文档注释所述的最小值）
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-15
+    claim: >-
+      防爆显存硬约束：启动期要求最大序列长度 runtime_max_model_len 不能超过总 token 容量的 80%（block_size * num_gpu_blocks * 0.8），否则直接抛异常拒绝启动；运行期当 KV 块使用率超过 90% 水位时暂停调度 prefill。
+    screen: 启动80%约束·调度90%水位线
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/engine/llm_engine.py:441-451"
+      - "csrc/engine/scheduler.hpp:80"
+      - "csrc/engine/scheduler.hpp:313"
+    quote: >-
+      max_seq_len = int(self.cache_config.block_size * num_gpu_blocks * 0.8); if runtime_max_model_len > max_seq_len: raise ValueError; static constexpr float GPU_CACHE_PREFILL_WATERMARK = 0.9f
+    commit: 9bd9cf2
+    calc: calc/EP06_capacity.py
+    kb: [R06#31, R06#32]
+    conditions: 引擎双重防御体系保证显存不被突发请求撑爆
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-16
+    claim: >-
+      开源版 DeepInfer 没有任何自动前缀缓存机制：BlockManager 仅提供块分配与释放，没有哈希索引、没有 Radix 树、也没有淘汰策略；请求结束释放后块直接回归 FIFO 空闲链表，内容会被后续请求直接覆盖。
+    screen: 开源版零自动前缀缓存
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/block_manager.hpp:27-117"
+      - "csrc/engine/block_manager.hpp:119-180"
+    quote: >-
+      csrc 全树无 radix/hash/lru 相关前缀命中逻辑；仅维护 _head 与 _tail 双链表
+    commit: 9bd9cf2
+    kb: [R06#25]
+    conditions: 源码完整检索证实不存在自动前缀缓存数据结构
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-17
+    claim: >-
+      显存内唯一的前缀共享原语是显式 Scheduler.fork_seq：通过 pin_blocks 将已完成 prefill 请求的整张块表引用计数加 1，并 pin 对应 state_id；被 fork 的子序列在首次 decode 时执行写时复制（COW）复制最后一块并克隆 state 槽。
+    screen: 显式fork_seq：pin块表与COW
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/scheduler.hpp:1082-1121"
+      - "csrc/engine/scheduler.hpp:602-617"
+      - "examples/benchmark.py:331-353"
+    quote: >-
+      block_manager->pin_blocks(fork_seq->cache.block_table); fork_seq->cache.state_id = seq->cache.state_id; _clone_state(*seq); clone_blocks.emplace_back(...)
+    commit: 9bd9cf2
+    kb: [R06#24]
+    conditions: 仅能由调用方显式调用 fork，不具备跨请求自动命中能力
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-18
+    claim: >-
+      外部前缀命中注入端口：Sequence 类暴露了 cached_hit_tokens 与 set_num_tokens 属性及方法供外部绑定，支持外部组件计算命中长度并直接注入块表，使引擎仅执行增量 prefill，但在开源树 Python 侧无生产调用者。
+    screen: 外部注入端口：增量Prefill插槽
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/pybind_sequence.cpp:118"
+      - "csrc/engine/pybind_sequence.cpp:127"
+      - "csrc/engine/sequence.hpp:210-214"
+    quote: >-
+      bind_sequence_property(sequence, "cached_hit_tokens", ...); void set_num_tokens(int value) { num_tokens = value; previous_num_tokens = value; }
+    commit: 9bd9cf2
+    kb: [R06#26]
+    conditions: C++ 底层插槽已就绪，上游分布式服务未开源
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-19
+    claim: >-
+      DeepSeek 生产环境的三层持久存储架构（文档描述）：L1 在飞数据位于 GPU HBM；L2 SWA 状态留在产生它的本地主机内存（单副本约 1.4 MB，不进 3FS，跨机命中走 400G VLAN 拉取）；L3 块状 KV 存入专用 3FS 分布式存储集群（约 100 PiB SSD，TTL 3–7 天）。
+    screen: 三层存储：HBM·主机内存·3FS
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:131-135"
+      - "doc/inference_deployment_qa.md:153"
+      - "doc/inference_deployment_qa.md:169"
+    quote: >-
+      SWA KV cache: Local host memory, single copy, nothing on 3FS; Paged block KV cache: Dedicated 3FS storage cluster; agent traffic 3 days, chatbot 7 days
+    commit: 9bd9cf2
+    kb: [R06#35]
+    conditions: 官方部署文档披露，开源代码树中未包含 3FS 客户端与主机内存池实现
+    verified_by: fact-checker@2026-10-26
+
+  - id: F06-20
+    claim: >-
+      三大主流推理引擎前缀缓存路线对比：vLLM 采用块级哈希（hash-based block）与本地 LRU 淘汰；SGLang 采用 UnifiedRadixCache（Token 级基数树）加 HiCache 多层显存/内存/存储体系；DeepInfer 生产环境将匹配前置到 Entrypoint 并在专用 3FS 集群上持久化，开源引擎仅保留最底层的调度与状态槽插槽。
+    screen: 对比：vLLM哈希·SGLang树
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:141-157"
+      - "csrc/engine/block_manager.hpp:27-117"
+    quote: >-
+      vLLM block hash prefix caching; SGLang UnifiedRadixCache; DeepInfer Entrypoint metadata hash-chain matching + 3FS persistent storage
+    commit: 9bd9cf2
+    kb: [R06#Q5, R13#4, R14#2]
+    conditions: 行业横向技术对比，基于官方开源文档与代码架构设计
+    verified_by: fact-checker@2026-10-26
