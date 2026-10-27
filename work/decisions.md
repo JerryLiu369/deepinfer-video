@@ -259,3 +259,18 @@
 - 理由：恪守 Master Spec 全流程规范。
 - 影响：EP09 交付物，STATUS 更新。
 - 决定人：showrunner
+
+### D-019 · 2026-10-28 · EP10 全流程流水线完工交付与 48 kHz 硬字幕广播级成片归档
+- 背景：依照委托人指令，严格依照 docs/ 与 templates/ 规范，端到端完成 EP10《内核、双硬件与“结果可信”》（13.51 分钟，18 个长节拍）全流程流水线（P2 事实包、P3 方案、P4 脚本、P5 双审、P6 分镜、P7 配音、P8 动画、P9 成片）。
+- 决定：
+  1. P2 事实包：编写计算脚本 `work/calc/EP10_bitmask_bandwidth.py`（推导词表 129,280 下 16KB/请求 bitmask、MTP=5 下 96.96KB/步、384 并发 35.51MB/步 H2D 专有流搬运及 2^31 定点 4.65e-10 精度上界），事实账本 `work/facts/EP10.yaml` 录入 19 条核验事实（A×17, B×2），lint_facts 0 错误 0 警告，编写研究简报 `work/research/EP10.md`；
+  2. P3 剧集方案：编制 `work/treatments/EP10.md`（18 饱满节拍，充分展开 5 大外部库与 TileLang 构建期同名镜像、浮点加法非结合律物理本质、去批维度归约、采样器一行一 CTA 与 2^31 定点直方图、绝对位置 RNG 与 3 子流、变长 MTP 全局竞争破坏独立性、结构化输出 xgrammar 异步编排与 rollback 回退、60 个 float PPL 全等指纹与 AIME 99.9% 生产真相），冷开场 A（现象反差）盲选胜出；
+  3. P4 脚本：编制 `work/scripts/EP10.md`（18 镜头，每镜 40~52 秒，严禁禁用词，单句长度控制在 42 字以内，包含 3 处 Q 提问，条件标注完整），通过 `parse_script.py` 与 `lint_script.py` 校验（0 错误 0 警告）；
+  4. P5 双审：`tech-reviewer` 与 `viewer` 独立双审，viewer 闭卷作答 5 道核心题 5/5 全对，输出 `work/reviews/EP10_tech_r1.md` 与 `work/reviews/EP10_viewer_r1.md`，全票放行；
+  5. P6 分镜：编制 `work/storyboards/EP10.md`（18 镜头动作 100% 覆盖 cue 点），art-director 纸面审放行（`work/reviews/EP10_visual_board.md`）；
+  6. P7 配音与粗剪：阿里云百炼 Qwen-Audio-3.1-TTS-Plus 完成 18 镜头全量配音（13.50 min，长暗欢+凌心双音色），timing 提取完成；
+  7. P8 动画实现与审片：`work/scenes/EP10.py` 实现全部 18 个镜头类，`render.py` preview 与 final 渲染 18 镜全部 OK 且 0 [dvlib] WARN，生成 94 张关键帧与 8 张拼图，美术审 `work/reviews/EP10_visual_r1.md` 与屏幕技术审 `work/reviews/EP10_tech_frames_r1.md` 全票通过；
+  8. P9 成片 QC：`tools/make_episode.sh EP10 final` 执行成功，输出 1920×1080 30 fps H.264、48 kHz 广播级立体声 AAC、ASS 像素级内嵌硬字幕、18 章节标记成片至 `work/release/EP10.mp4`（13:30.62，约 13.51 分钟，完美契合 13~15 分钟饱满大集标准）与 `work/release/EP10.srt`，响度 -16.00 LUFS（精确吻合），QC 检查单全通（`work/reviews/EP10_qc.md`）。
+- 理由：恪守 Master Spec 全流程规范，严禁压缩为短小脚本，充分展开 18 镜头大集标准交付。
+- 影响的文件 / 集：EP10 全套交付物、`work/STATUS.md`、`work/decisions.md`
+- 决定人：showrunner / 委托人
