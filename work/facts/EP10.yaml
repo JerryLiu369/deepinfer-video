@@ -1,0 +1,322 @@
+# EP10 事实账本（经 fact-checker 严格复核）
+episode: EP10
+facts:
+  - id: F10-01
+    claim: DeepInfer 算子面由 5 个外部内核库（FlashMLA、DeepGEMM、DeepEP、TileKernels、DeepSelect）与仓库自研 TileLang 算子构成，覆盖注意力、GEMM、EP通信、门控及TopK。
+    screen: 5大外部库+自研TileLang
+    grade: A
+    status: verified
+    evidence:
+      - "README.md:23"
+      - "deepinfer/model_executor/models/v4_modules/attn.py:617-669"
+      - "deepinfer/model_executor/layers/linear.py:165"
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:469-501"
+    quote: >-
+      Optimized kernels: FlashMLA, DeepGEMM, DeepEP, TileKernels, DeepSelect, and custom TileLang kernels.
+    commit: 9bd9cf2
+    kb: [R10#1, R10#3, R10#7, R10#8, R10#9, R10#10]
+    conditions: 仅开源仓库内的实际集成与调用代码
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-02
+    claim: 双硬件适配在构建期二选一，通过 scripts/build_vendor.sh 分流安装同名包（deep_ep、deep_gemm、flash_mla、deep_select），使上层模型代码无需平台 if 分支。
+    screen: 构建期同名包镜像
+    grade: A
+    status: verified
+    evidence:
+      - "scripts/build_vendor.sh:7-22"
+      - "vendor/DeepGEMM-Ascend/README.md:9"
+      - "vendor/DeepEP-Ascend/README.md:62"
+    quote: >-
+      nvidia) BUILD_TARGET=CUDA; PACKAGES=(DeepSelect FlashMLA DeepEP DeepGEMM); INSTALL=(deep_select flash_mla deep_ep deep_gemm) ;
+      ascend) BUILD_TARGET=ASCEND; PACKAGES=(DeepSelect FlashMLA DeepEP-Ascend DeepGEMM-Ascend); INSTALL=(deep_select flash_mla deep_ep deep_gemm)
+    commit: 9bd9cf2
+    kb: [R10#2]
+    conditions: 针对 NVIDIA CUDA 与华为昇腾 NPU 两套构建目标
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-03
+    claim: 自研 TileLang 算子采用三层结构，根目录提供参考实现与测试，cuda/ 与 asc/ 分别实现 43 个同名 *_tl 工厂，由 ops.py 按平台动态重导出。
+    screen: ops.py纯名字分发
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/ops.py:13-32"
+      - "deepinfer/platform.py:55-89"
+    quote: >-
+      _pkg = importlib.import_module(f"{__package__}.{PLATFORM.tilelang_ops_backend}") ;
+      if not _name.endswith("_tl"): continue ; assert globals().get(_name, _obj) is _obj
+    commit: 9bd9cf2
+    kb: [R10#15, R10#16]
+    conditions: CUDA 后端 43 个工厂，Ascend 后端 43 个同名工厂
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-04
+    claim: 硬件底层差异被轻量抽象，Ascend 采用 rstd_1ulp 两段 FP32 补偿对齐训练精度；量化缩放因子在 NVIDIA 打包为 int32（4个UE8M0），在 Ascend 打包为 int16（2个UE8M0）。
+    screen: 1ulp补偿与SF打包差异
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/asc/rstd_1ulp.py:1-10"
+      - "deepinfer/platform.py:63"
+      - "deepinfer/platform.py:138"
+      - "vendor/DeepGEMM-Ascend/README.md:56"
+    quote: >-
+      keep the FP32/FMA operation order identical so both inference paths follow the hai-llm numerical standard ;
+      NVIDIA: fp8_sf_type = torch.int32 ; Ascend: fp8_sf_type = torch.int16
+    commit: 9bd9cf2
+    kb: [R10#18, R10#22, R10#28]
+    conditions: 对齐内部 hai-llm 训练精度规范
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-05
+    claim: 官方部署文档指出开源 FlashMLA 比内部版少一个手写 SASS 优化，导致解码 attention 内核慢 5%–10%，但端到端整体性能差距不超过 5%。
+    screen: 解码慢5-10%·端到端≤5%
+    grade: B
+    status: verified
+    evidence:
+      - "doc/inference_deployment_qa.md:233-237"
+    quote: >-
+      FlashMLA lacks one hand-tuned SASS optimization, which makes the decoding kernel 5%–10% slower. End-to-end performance is close — at most 5% apart.
+    commit: 9bd9cf2
+    kb: [R10#29, R10#30]
+    conditions: 官方问答文档公开声明，未披露具体硬件型号与基准配置
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-06
+    claim: 批不变性（Batch Invariance）的物理根源在于浮点加法非结合律 (a+b)+c ≠ a+(b+c)，GPU 并行归约树的分块大小与顺序随 batch 中动态 token 总数变化而改变，引发数值舍入漂移。
+    screen: 浮点加法非结合律
+    grade: A
+    status: verified
+    evidence:
+      - "vendor/FlashMLA/flash_mla/flash_mla_interface.py:110-112"
+      - "vendor/DeepGEMM/csrc/jit_kernels/heuristics/mega_gate.hpp:110-126"
+    quote: >-
+      If True, the split-KV decoding path is disabled so that results do not depend on how the batch is partitioned.
+      deterministic mode is also batch invariant, so K is never split.
+    commit: 9bd9cf2
+    kb: [R11#4, R11#5, R11#Q1]
+    conditions: 浮点累加中的舍入误差（1 ulp 差异）足以在采样边界改变输出 token
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-07
+    claim: DEEPINFER_BATCH_INVARIANT=1 环境变量默认关闭；开启后作用于 4 处：FlashMLA 禁用 split-KV、DeepGEMM 禁 cuBLASLt 与 split-K、EP 通信禁用多次归约、稠密 prefill 停用融合算子。
+    screen: 4大子系统去批维度归约
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/environ.py:197"
+      - "vendor/FlashMLA/csrc/api/sparse_decode.cpp:220-223"
+      - "vendor/DeepGEMM/csrc/apis/gemm.hpp:519-522"
+      - "deepinfer/model_executor/parallel_utils/userbuffer.py:79"
+      - "deepinfer/model_executor/models/v4_modules/attn.py:86-93"
+    quote: >-
+      DEEPINFER_BATCH_INVARIANT = EnvVar.bool() ;
+      bool enable_split_kv = !enable_batch_invariant && !(topk + extra_topk <= 640);
+    commit: 9bd9cf2
+    kb: [R11#1, R11#2, R11#4, R11#5, R11#7]
+    conditions: 仅在 NVIDIA 平台支持开启，官方说明速度会有所变慢 (slower)
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-08
+    claim: 采样前向核采用每行一个 CTA 设计，归约树形状只取决于固定词表大小（vocab_size），与 batch 维度大小完全解耦，确保单行归约结果不受批组成干扰。
+    screen: 一行一CTA·词表定归约
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py:36-45"
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py:95-97"
+    quote: >-
+      THREADS, LSE_BD, SAMPLE_BD = 256, 8192, 2048 ; with T.Kernel(total_q, threads=THREADS) as row:
+    commit: 9bd9cf2
+    kb: [R11#8, R11#9]
+    conditions: 词表大小 >= 8192 时采用 256 线程固定瓦片
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-09
+    claim: 采样器在 top-p / top-k 过滤中将概率放大 2^31 倍量化为 uint32 整数，利用基数直方图累加寻找截断阈值，通过整数可交换加法消除浮点累加顺序敏感性。
+    screen: 2^31定点CDF直方图
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py:62-64"
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py:118-122"
+      - "deepinfer/model_executor/layers/tilelang_ops/random_sampling.py:38-44"
+    quote: >-
+      SCALE_BITS = uint32.bits - 1 ; T.atomic_add(hist[bucket], T.cast(T.exp(...) * SCALE, uint32))
+    commit: 9bd9cf2
+    kb: [R11#10, R11#11]
+    conditions: SCALE_BITS=31，定点 CDF 精度量级约为 2^-31
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-10
+    claim: 确定性采样通过每请求的 uint64 seq_seed 初始化随机流，并将 RNG 下标绑定为序列绝对 token 位置（sample_positions = seqlen_k），确保请求重放与抢占不会引发随机数错位。
+    screen: seq_seed与绝对位置RNG
+    grade: A
+    status: verified
+    evidence:
+      - "csrc/engine/prepare_sample.cpp:198-206"
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/random_sampling.py:247"
+      - "deepinfer/sampling_params.py:44"
+      - "deepinfer/sampling_params.py:86-91"
+    quote: >-
+      sample_positions_ptr[sample_offset++] = seq_metadata->seqlen_k;
+      seq = sample_positions[row] * 3 + sample_case ; T.rng_init(seq_seeds[row], seq)
+    commit: 9bd9cf2
+    kb: [R11#13, R11#14]
+    conditions: 绝对 token 位置由 C++ prepare_sample 计算
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-11
+    claim: 每个 token 位置划分 3 条独立随机子流（3p+0 正式采样、3p+1 拒绝重采样、3p+2 投机接受检验），MTP 草稿模型采样再加 1000000007 偏移，防止不同机制串流。
+    screen: 3条独立子流+草稿偏移
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py:392-486"
+      - "deepinfer/model_executor/layers/tilelang_ops/fused_sample.py:15"
+      - "deepinfer/model_executor/layers/tilelang_ops/fused_sample.py:93"
+    quote: >-
+      verify_seq = sample_positions[row] * 3 + 2 ; position = sample_positions[row] * 3 ; reject_seq = sample_positions[row] * 3 + 1 ;
+      _MTP_SEED_OFFSET = 1000000007
+    commit: 9bd9cf2
+    kb: [R11#15]
+    conditions: 适用于开启投机解码 MTP 验证时的联合采样
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-12
+    claim: 变长 MTP（DSpark）按全批 token 预算（extra_budget = total_q - num_seqs）依据置信度全局排名动态分配验证长度，使单请求推进步数依赖同批邻居，因此确定性模式必须将其关闭。
+    screen: 变长MTP破坏同批独立性
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/tilelang_ops/schedule_mtp_varlen.py:17-98"
+      - "deepinfer/worker/worker.py:218-236"
+      - "README.md:28"
+    quote: >-
+      Distribute total_q tokens across sequences based on MTP confidence rates. extra_budget = total_q - num_seqs ;
+      Enable deterministic sampling: DEEPINFER_BATCH_INVARIANT=1 DEEPINFER_ENABLE_MTP_VARLEN=0
+    commit: 9bd9cf2
+    kb: [R11#16, R11#Q2]
+    conditions: 必须设 DEEPINFER_ENABLE_MTP_VARLEN=0 回退到固定验证长度（如默认 5）
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-13
+    claim: 确定性采样的双硬件边界上，Ascend NPU 实现了同构的绝对位置采样器，但因算子层批不变性缺失（运行时断言），端到端跨批一致性仅对 NVIDIA 平台承诺。
+    screen: 端到端确定性仅承诺NVIDIA
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/worker/runtime_config.py:56-63"
+      - "deepinfer/model_executor/layers/tilelang_ops/asc/random_sampling.py:183-192"
+      - "README.md:27-28"
+    quote: >-
+      if PLATFORM.is_npu: assert not envs.DEEPINFER_BATCH_INVARIANT ;
+      Enable with DEEPINFER_BATCH_INVARIANT=1 (NVIDIA only)
+    commit: 9bd9cf2
+    kb: [R11#3, R11#17]
+    conditions: NPU 平台开启批不变性会直接触发断言报错
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-14
+    claim: 结构化输出（SO）基于上游 xgrammar 语法引擎实现，DeepInfer 负责外围工程：通过绑定空闲 CPU 核心的独立线程池执行异步编译，未完成编译的请求不进入调度循环。
+    screen: xgrammar引擎+异步编译池
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/structure_output/compiler.py:6-7"
+      - "deepinfer/structure_output/compiler.py:34-39"
+      - "deepinfer/structure_output/so_matcher_builder.py:29-49"
+      - "deepinfer/structure_output/so_matcher_builder.py:78-95"
+    quote: >-
+      from xgrammar import GrammarCompiler as InnerCompiler ;
+      self._pool = ThreadPoolExecutor(max_workers=max_workers, initializer=initializer)
+    commit: 9bd9cf2
+    kb: [R11#19, R11#21]
+    conditions: 支持 JSON（严格模式）、正则表达式与 EBNF 语法编译
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-15
+    claim: 结构化输出在 CPU 侧生成 pinned uint32 bitmask 掩码（每请求约 16 KB），通过专有 CUDA 流异步 H2D 搬运，GPU 侧仅由 TileLang kernel 执行原位相与和 logits 的 -inf 填充。
+    screen: CPU生成bitmask·GPU填负无穷
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/structure_output/matcher.py:36-45"
+      - "deepinfer/model_executor/layers/sampler.py:320-326"
+      - "deepinfer/model_executor/layers/sampler.py:391-407"
+      - "deepinfer/model_executor/layers/tilelang_ops/structure_output.py:12-37"
+    quote: >-
+      mask = torch.empty(get_bitmask_shape(batch_size, vocab_size), dtype=bitmask_dtype, pin_memory=pin_memory) ;
+      kernel = ops.apply_token_bitmask_by_step_inplace_tl(...) ; logits.masked_fill_(~allowed, -torch.inf)
+    commit: 9bd9cf2
+    kb: [R11#23, R11#24]
+    conditions: 词表大小 129,280 对应 4,040 个 uint32 字（约 15.8 KB/请求）
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-16
+    claim: 结构化输出与投机解码联动时，CPU 预生成当前步加草稿共 k+1 份掩码；当部分草稿被主模型拒绝时，调用 matcher.rollback(num_accepted_steps) 回退语法状态机。
+    screen: 预生成k+1掩码与回退回滚
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/layers/sampler.py:352-376"
+      - "deepinfer/structure_output/matcher.py:206-232"
+    quote: >-
+      for k, draft_token in enumerate(seq_metadata.last_next_n_token): ... matcher.rollback(num_accepted_steps)
+    commit: 9bd9cf2
+    kb: [R11#25]
+    conditions: 回滚上限受 MAX_ROLLBACK_TOKENS 限制，防止语法状态污染
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-17
+    claim: 结构化输出支持 trigger_token_ids 与 bound_token_id 混合引导，允许自由思考后进入语法约束；开源版在服务进程内线程池现编，而生产文档描述采用独立 SO 机器集群预编译。
+    screen: 自由思考混合引导·两套形态
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/structure_output/matcher.py:115-153"
+      - "deepinfer/structure_output/so_matcher_builder.py:60-61"
+      - "doc/inference_deployment_qa.md:282-288"
+    quote: >-
+      def constrained(self): return self._bound_fired() or not self._trigger_pending() ;
+      SO compilation decoupled from inference nodes.
+    commit: 9bd9cf2
+    kb: [R11#26, R11#4]
+    conditions: 开源代码明确拒绝已序列化语法结构（not supported）
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-18
+    claim: 引擎内置四道严格测试防线：offline_decode_ppl.json 包含 60 个浮点数的全等指纹回归、test_kl 检验散度为 0、test_batch_invariant 检验 64 条序列全等、test_sampler 经 KS 检验验证无偏采样。
+    screen: 4道测试防线·60个PPL指纹
+    grade: A
+    status: verified
+    evidence:
+      - "tests/models/test_offline_inference.py:153-158"
+      - "tests/models/offline_decode_ppl.json:1-90"
+      - "tests/models/test_kl.py:30"
+      - "tests/models/test_batch_invariant.py:35-105"
+      - "tests/models/test_sampler.py:121-247"
+    quote: >-
+      assert actual == expected ; max_kl: float = 0.0 ; assert result_batched == result_single ; all_p_value <= 1e-5
+    commit: 9bd9cf2
+    kb: [R11#27, R11#28, R11#29, R11#30, R11#31]
+    conditions: 涵盖 NVIDIA 与 Ascend 双硬件上的 long/short 及 DP rank 配置
+    verified_by: fact-checker@2026-10-27
+
+  - id: F10-19
+    claim: 官方评测指标仅报告 Pass@1：AIME 2026 为 99.9%、GPQA Diamond 为 93.4%、HLE-Full 为 42.6%；该公开成绩来自开启变长 MTP、关闭批不变的最快非确定性生产路径。
+    screen: AIME99.9%·非确定生产路径
+    grade: B
+    status: verified
+    evidence:
+      - "eval/README.md:13-17"
+      - "eval/README.md:208-221"
+      - "eval/run_eval.py:118-131"
+    quote: >-
+      The reported metric is Pass@1. | AIME 2026 | 99.9% | GPQA Diamond | 93.4% | HLE-Full | 42.6% | ;
+      run_eval forces DEEPINFER_ENABLE_MTP_VARLEN=1 and batch-invariant is opt-in.
+    commit: 9bd9cf2
+    kb: [R11#32, R11#35, R11#36, R11#Q5]
+    conditions: V4.1 模型默认配置，reasoning effort 100，官方自述属于指示性 (indicative) 参考
+    verified_by: fact-checker@2026-10-27
