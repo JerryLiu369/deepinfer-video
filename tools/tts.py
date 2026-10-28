@@ -34,7 +34,7 @@ import qwen_tts  # noqa: E402
 
 SR = 24000
 BACKENDS = ["qwen", "edge", "command"]
-DEFAULT_JOBS = {"qwen": 4, "edge": 6, "command": 2}
+DEFAULT_JOBS = {"qwen": 2, "edge": 6, "command": 2}
 
 
 def load_voices() -> dict:

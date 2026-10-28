@@ -210,3 +210,75 @@ facts:
     kb: [R08#21]
     conditions: 分布式推理运行时守护规则
     verified_by: fact-checker@2026-10-26
+
+  - id: F08-16
+    claim: 官方 Decode Pareto 扫描吞吐曲线中的每点数值均乘以了 tau=3.25 的折算系数（固定 nextn=3，假设每 token 接受率 75%，即 1 + 3 * 0.75 = 3.25），属于容量模型推算值而非端到端实测。
+    screen: 假定接受率折算系数3.25
+    grade: A
+    status: verified_with_caveat
+    evidence:
+      - "examples/sweep/plot_pareto.py:59-67"
+      - "examples/benchmark.py:405-408"
+    quote: "tau = 1.0 + nextn * acceptance_rate"
+    commit: 9bd9cf2
+    kb: [R16#1, R16#2]
+    conditions: 64 卡 SM100、131K 上下文、固定 nextn=3
+    caveat: 图表横轴每用户速度与纵轴吞吐均乘以 tau=3.25，实际步频须除以 3.25
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-17
+    claim: MLA 架构将 KV 压缩为低维潜变量，Attention 算子开销主要在低维投影；全模型仅保留 ReplicatedLinear 与 ParallelRoutedLinear，舍弃张量并行以避免每层高频 All-Reduce。
+    screen: MLA 架构舍弃 TP
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/linear.py:8-34"
+      - "deepinfer/model_executor/models/v4_modules/attn.py:61-75"
+    quote: "class ReplicatedLinear(nn.Module):"
+    commit: 9bd9cf2
+    kb: [R08#4, R08#5]
+    conditions: DeepInfer 模型执行器线性层切分规则
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-18
+    claim: DeepEP 的 dispatch 通信采用变长 Expand 布局与延迟收尾（defer_epilogue），通信与后续计算流并发执行，并在 Wait 事件触发时完成复制收尾。
+    screen: DeepEP 变长延迟收尾
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:468-492"
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:578-585"
+    quote: "event_overlap = self.dispatch(hidden_states, topk_idx, topk_weights, input_metadata, None)"
+    commit: 9bd9cf2
+    kb: [R08#10, R08#11]
+    conditions: 标准 DeepEP 通信缓冲区调用
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-19
+    claim: EPLB 的统计输入为通信核函数累加记录的本地专家接收 token 数（cumulative_local_expert_recv_stats），采样开销接近为零，每步由调度器清零并写入定长滑动环形窗口。
+    screen: 核函数累加零开销采样
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/models/v4_modules/mlp.py:474-475"
+      - "deepinfer/model_executor/eplb/__init__.py:113-138"
+    quote: "cumulative_local_expert_recv_stats=self._eplb_layer().expert_count"
+    commit: 9bd9cf2
+    kb: [R08#15, R08#36]
+    conditions: 仅统计实际被 dispatch 的有效 token
+    verified_by: fact-checker@2026-10-26
+
+  - id: F08-20
+    claim: Mirror CP 仅在 Prefill 阶段生效（assert self.is_prompt），在模型入口重排为 mirror 布局，在模型出口通过 all_gather 与反向索引还原原始顺序，对采样器完全透明。
+    screen: 入口重排出口还原透明 CP
+    grade: A
+    status: verified
+    evidence:
+      - "deepinfer/model_executor/input_metadata/input_metadata.py:169-180"
+      - "deepinfer/model_executor/models/deepseek.py:169-170"
+      - "deepinfer/model_executor/models/deepseek.py:242-244"
+    quote: "hidden_states = gather(gathered_hidden_states, input_metadata.mirror_cp_reverse_index)"
+    commit: 9bd9cf2
+    kb: [R08#25, R08#26]
+    conditions: 仅限 CP > 1 且处于 Prefill 阶段
+    verified_by: fact-checker@2026-10-26
